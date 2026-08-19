@@ -37,8 +37,8 @@ pnpm build
 ## 배포
 
 GitHub Actions의 `Deploy Web` 워크플로가 Vercel production 배포를
-담당합니다. 최초 수동 배포가 성공한 뒤 저장소 변수
-`CD_WEB_ENABLED=true`로 자동 배포를 활성화합니다.
+담당합니다. `main` 브랜치의 `CI` 워크플로가 성공하면
+`CD_WEB_ENABLED=true` 설정에 따라 자동으로 production에 배포됩니다.
 
 필요한 `production-web` 환경 secret은 다음과 같습니다.
 
