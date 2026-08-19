@@ -22,6 +22,10 @@ pnpm dev
 API 주소를 바꾸려면 `apps/web/.env.example`을 `apps/web/.env.local`로
 복사하고 `NEXT_PUBLIC_API_URL`을 설정합니다.
 
+Supabase Project URL과 publishable key는 공개 클라이언트 설정으로
+`.env.example`에 기록되어 있습니다. DB 비밀번호와 secret/service-role
+키는 이 저장소에서 사용하지 않습니다.
+
 ## 검증
 
 ```bash
