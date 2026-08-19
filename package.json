@@ -1,5 +1,5 @@
 {
-  "name": "anigeunde",
+  "name": "anigeunde-web",
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
@@ -9,4 +9,3 @@
     "typecheck": "pnpm --filter @anigeunde/web typecheck"
   }
 }
-
