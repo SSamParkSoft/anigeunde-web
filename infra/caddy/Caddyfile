@@ -1,0 +1,23 @@
+api.example.com {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    request_body {
+        max_size 1MB
+    }
+
+    reverse_proxy 127.0.0.1:8000 {
+        health_uri /health/live
+    }
+
+    log {
+        output journald
+        format json
+    }
+}

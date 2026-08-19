@@ -1,0 +1,12 @@
+{
+  "name": "anigeunde",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "dev": "pnpm --filter @anigeunde/web dev",
+    "build": "pnpm --filter @anigeunde/web build",
+    "lint": "pnpm --filter @anigeunde/web lint",
+    "typecheck": "pnpm --filter @anigeunde/web typecheck"
+  }
+}
+
