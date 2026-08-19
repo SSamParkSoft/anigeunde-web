@@ -58,4 +58,7 @@ CI/CD는 기능 개발보다 먼저 적용한다. 최소 파이프라인은 다�
 - 2026-08-19: 웹·API CI 워크플로 작성 완료
 - 2026-08-19: Vercel 웹 CD와 OCI API CD 워크플로 작성 완료
 - 2026-08-19: OCI 릴리스 전환, systemd, Caddy 기본 파일 작성 완료
+- 2026-08-19: GitHub `main` 최초 CI에서 Web·API 검사 통과
+- 2026-08-19: `main` 브랜치에 Web·API 필수 상태 검사와 강제 푸시·삭제 방지 적용
+- 현재 `CD_WEB_ENABLED=false`, `CD_API_ENABLED=false`로 자동 배포 비활성화
 - 남은 활성화 작업: GitHub 환경 비밀값 등록, Vercel 프로젝트 연결, API 도메인 확정, OCI 최초 런타임 설치
