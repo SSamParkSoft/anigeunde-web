@@ -1,15 +1,17 @@
 import type { Comment, IssueDetail, IssueSummary } from "./types";
+import { getSupabaseBrowserClient } from "./supabase/client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-export const DEMO_VIEWER_ID = "demo-user";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const { data } = await getSupabaseBrowserClient().auth.getSession();
+  const accessToken = data.session?.access_token;
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
-      "X-Viewer-ID": DEMO_VIEWER_ID,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init.headers,
     },
   });
@@ -22,6 +24,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  session: () => request<{ authenticated: boolean; requires_bootstrap?: boolean }>("/api/v1/auth/session"),
+  bootstrapProfile: () => request("/api/v1/profile/bootstrap", {
+    method: "POST",
+    body: JSON.stringify({
+      age_confirmed: true,
+      age_gate_version: "2026-08-19",
+      terms_version: "2026-08-19",
+      privacy_version: "2026-08-19",
+    }),
+  }),
+  consentSensitivePosition: () => request("/api/v1/consents", {
+    method: "POST",
+    body: JSON.stringify({
+      consent_type: "SENSITIVE_POSITION",
+      version: "2026-08-19",
+      granted: true,
+    }),
+  }),
   issues: () => request<{ items: IssueSummary[] }>("/api/v1/issues"),
   issue: (slug: string) => request<IssueDetail>(`/api/v1/issues/${slug}`),
   comments: (issueId: string) =>
@@ -34,7 +54,7 @@ export const api = {
         body: JSON.stringify({
           option_id: optionId,
           visibility: "PSEUDONYMOUS",
-          sensitive_data_consent_version: "2026-08-18",
+          sensitive_data_consent_version: "2026-08-19",
         }),
       },
     ),

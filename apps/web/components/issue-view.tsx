@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  clearPendingParticipation,
+  readPendingParticipation,
+  startSocialLogin,
+  type LoginProvider,
+  type PendingParticipation,
+} from "@/lib/auth";
 import { api } from "@/lib/api";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Comment, IssueDetail } from "@/lib/types";
 
 export function IssueView({ slug }: { slug: string }) {
@@ -14,7 +22,24 @@ export function IssueView({ slug }: { slug: string }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [commentSort, setCommentSort] = useState<"latest" | "popular">("popular");
-  const pendingAction = useRef<null | (() => void | Promise<void>)>(null);
+  const pendingParticipation = useRef<PendingParticipation | null>(null);
+  const resumingLogin = useRef(false);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    void supabase.auth.getSession().then(({ data }) => setIsAuthenticated(Boolean(data.session)));
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(Boolean(session));
+    });
+
+    const authError = new URLSearchParams(window.location.search).get("auth_error");
+    if (authError) {
+      queueMicrotask(() => setError("로그인을 완료하지 못했습니다. 다시 시도해주세요."));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -22,8 +47,8 @@ export function IssueView({ slug }: { slug: string }) {
       .then(async (issueData) => {
         const commentData = await api.comments(issueData.id);
         if (!active) return;
-        setIssue({ ...issueData, my_position_id: null, results: null });
-        setComments(asPublicComments(commentData.items));
+        setIssue(issueData);
+        setComments(commentData.items);
       })
       .catch((reason: Error) => {
         if (active) setError(reason.message);
@@ -33,6 +58,36 @@ export function IssueView({ slug }: { slug: string }) {
       });
     return () => { active = false; };
   }, [slug]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !issue || resumingLogin.current) return;
+    const pending = readPendingParticipation(slug);
+    if (!pending) return;
+
+    resumingLogin.current = true;
+    void (async () => {
+      try {
+        await api.bootstrapProfile();
+        await api.consentSensitivePosition();
+
+        if (pending.kind === "position" && pending.optionId) {
+          const result = await api.choosePosition(issue.id, pending.optionId);
+          setIssue((current) => current ? {
+            ...current,
+            my_position_id: result.my_position_id,
+            results: result.results,
+          } : current);
+        } else if (pending.kind === "comment") {
+          setError("로그인이 완료되었습니다. 의견을 등록하려면 먼저 위에서 내 생각을 선택해주세요.");
+        }
+        clearPendingParticipation();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "로그인 후 참여 준비를 완료하지 못했습니다.");
+      } finally {
+        resumingLogin.current = false;
+      }
+    })();
+  }, [isAuthenticated, issue, slug]);
 
   async function persistPosition(optionId: string) {
     if (!issue || submitting) return;
@@ -53,7 +108,7 @@ export function IssueView({ slug }: { slug: string }) {
       void persistPosition(optionId);
       return;
     }
-    pendingAction.current = () => persistPosition(optionId);
+    pendingParticipation.current = { version: 1, issueSlug: slug, kind: "position", optionId };
     setLoginOpen(true);
   }
 
@@ -70,16 +125,17 @@ export function IssueView({ slug }: { slug: string }) {
       void continueAfterLogin();
       return;
     }
-    pendingAction.current = continueAfterLogin;
+    pendingParticipation.current = { version: 1, issueSlug: slug, kind: "retry" };
     setLoginOpen(true);
   }
 
-  async function finishDemoLogin() {
-    setIsAuthenticated(true);
-    setLoginOpen(false);
-    const action = pendingAction.current;
-    pendingAction.current = null;
-    await action?.();
+  async function beginSocialLogin(provider: LoginProvider) {
+    const pending = pendingParticipation.current ?? {
+      version: 1 as const,
+      issueSlug: slug,
+      kind: "retry" as const,
+    };
+    await startSocialLogin(provider, pending);
   }
 
   async function createComment(body: string) {
@@ -89,16 +145,8 @@ export function IssueView({ slug }: { slug: string }) {
   }
 
   async function submitOpinion(body: string) {
-    const submitAfterLogin = async () => {
-      if (!issue?.my_position_id) {
-        setError("로그인되었습니다. 의견을 등록하려면 먼저 위에서 내 생각을 선택해주세요.");
-        document.querySelector(".position-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-      await createComment(body);
-    };
     if (!isAuthenticated) {
-      pendingAction.current = submitAfterLogin;
+      pendingParticipation.current = { version: 1, issueSlug: slug, kind: "comment", commentBody: body };
       setLoginOpen(true);
       return false;
     }
@@ -236,7 +284,10 @@ export function IssueView({ slug }: { slug: string }) {
           </section>
         )}
       </div>
-      {loginOpen ? <LoginGate onClose={() => { pendingAction.current = null; setLoginOpen(false); }} onComplete={finishDemoLogin} /> : null}
+      {loginOpen ? <LoginGate onClose={() => {
+        pendingParticipation.current = null;
+        setLoginOpen(false);
+      }} onProvider={beginSocialLogin} /> : null}
     </main>
   );
 }
@@ -319,35 +370,33 @@ function CommentCard({ comment, index, onReact, onRebuttal, requireParticipation
   );
 }
 
-function asPublicComments(comments: Comment[]): Comment[] {
-  return comments.map((comment) => ({
-    ...comment,
-    is_mine: false,
-    viewer_reactions: [],
-    replies: asPublicComments(comment.replies ?? []),
-  }));
-}
-
 function popularityScore(comment: Comment) {
   return comment.like_count * 2 + comment.rebuttal_count - comment.dislike_count;
 }
 
-function LoginGate({ onClose, onComplete }: { onClose: () => void; onComplete: () => Promise<void> }) {
+function LoginGate({ onClose, onProvider }: {
+  onClose: () => void;
+  onProvider: (provider: LoginProvider) => Promise<void>;
+}) {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [serviceConsent, setServiceConsent] = useState(false);
   const [sensitiveConsent, setSensitiveConsent] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function continueWithProvider() {
+  async function continueWithProvider(provider: LoginProvider) {
     if (!ageConfirmed || !serviceConsent || !sensitiveConsent) {
       setError("세 가지 필수 항목을 모두 확인해주세요.");
       return;
     }
     setBusy(true);
     setError("");
-    try { await onComplete(); }
-    finally { setBusy(false); }
+    try {
+      await onProvider(provider);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "소셜 로그인을 시작하지 못했습니다.");
+      setBusy(false);
+    }
   }
 
   return (
@@ -364,10 +413,10 @@ function LoginGate({ onClose, onComplete }: { onClose: () => void; onComplete: (
         </div>
         {error ? <p className="login-gate-error">{error}</p> : null}
         <div className="social-login-buttons">
-          <button type="button" onClick={() => void continueWithProvider()} disabled={busy}>G <span>Google로 계속하기</span></button>
-          <button className="kakao-login" type="button" onClick={() => void continueWithProvider()} disabled={busy}>K <span>카카오로 계속하기</span></button>
+          <button type="button" onClick={() => void continueWithProvider("google")} disabled={busy}>G <span>Google로 계속하기</span></button>
+          <button className="kakao-login" type="button" onClick={() => void continueWithProvider("kakao")} disabled={busy}>K <span>카카오로 계속하기</span></button>
         </div>
-        <small>현재는 화면 검증용 데모 로그인입니다. 실제 소셜 계정 정보는 전달되지 않습니다.</small>
+        <small>소셜 계정 정보는 로그인 확인에만 사용되며 다른 이용자에게 공개되지 않습니다.</small>
       </section>
     </div>
   );
