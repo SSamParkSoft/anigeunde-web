@@ -55,7 +55,6 @@ jobs:
           test -n "$VERCEL_PROJECT_ID"
 
       - name: Pull Vercel production settings
-        working-directory: apps/web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -63,7 +62,6 @@ jobs:
         run: pnpm dlx vercel@59.1.4 pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Build Vercel output
-        working-directory: apps/web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -72,7 +70,6 @@ jobs:
 
       - name: Deploy production
         id: deploy
-        working-directory: apps/web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
