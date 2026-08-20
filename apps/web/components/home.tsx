@@ -47,16 +47,19 @@ export function Home() {
     () => ["전체", ...Array.from(new Set(issues.map((issue) => issue.category)))],
     [issues],
   );
-  const filtered = category === "전체" ? issues : issues.filter((issue) => issue.category === category);
+  const categoryFiltered = category === "전체" ? issues : issues.filter((issue) => issue.category === category);
+  const filtered = categoryFiltered.filter((issue) => (
+    sort === "마감" ? isIssueClosed(issue) : !isIssueClosed(issue)
+  ));
   const visible = [...filtered].sort((a, b) => {
     if (sort === "최신") return apiTimestamp(b.published_at, 0) - apiTimestamp(a.published_at, 0);
-    if (sort === "마감임박") {
-      return apiTimestamp(a.closes_at, Number.MAX_SAFE_INTEGER)
-        - apiTimestamp(b.closes_at, Number.MAX_SAFE_INTEGER);
+    if (sort === "마감") {
+      return apiTimestamp(b.closes_at, apiTimestamp(b.published_at, 0))
+        - apiTimestamp(a.closes_at, apiTimestamp(a.published_at, 0));
     }
     return activityScore(b) - activityScore(a);
   });
-  const rankedIssues = [...issues].sort((a, b) => activityScore(b) - activityScore(a));
+  const rankedIssues = issues.filter((issue) => !isIssueClosed(issue)).sort((a, b) => activityScore(b) - activityScore(a));
   const hottest = rankedIssues[0];
   const issueTotalPages = Math.max(1, Math.ceil(visible.length / ISSUE_PAGE_SIZE));
   const currentIssuePage = Math.min(issuePage, issueTotalPages);
@@ -131,7 +134,7 @@ export function Home() {
 
           <div className="feed-controls">
             <div className="sort-tabs" aria-label="정렬">
-              {["활발한", "최신", "마감임박"].map((item) => (
+              {["활발한", "최신", "마감"].map((item) => (
                 <button key={item} className={sort === item ? "active" : ""} onClick={() => { setSort(item); setIssuePage(1); }}>{item}</button>
               ))}
             </div>
@@ -143,15 +146,18 @@ export function Home() {
           </div>
 
           <div className="feed-title-row">
-            <h2>전체 주제</h2>
+            <h2>{sort === "마감" ? "마감된 주제" : "전체 주제"}</h2>
             <span>{visible.length}개</span>
           </div>
 
           <div className="community-issue-list">
             {pagedIssues.map((issue) => <CommunityIssue issue={issue} key={issue.id} />)}
             {loading ? [1, 2, 3].map((item) => <div className="community-skeleton" key={item} />) : null}
-            {!loading && !issues.length && !error ? (
-              <div className="community-error"><b>현재 열린 주제가 없습니다.</b><span>검수가 끝난 새 주제가 발행되면 여기에 표시됩니다.</span></div>
+            {!loading && !visible.length && !error ? (
+              <div className="community-error">
+                <b>{sort === "마감" ? "아직 마감된 주제가 없습니다." : "현재 열린 주제가 없습니다."}</b>
+                <span>{sort === "마감" ? "참여 기간이 끝난 주제가 여기에 모입니다." : "검수가 끝난 새 주제가 발행되면 여기에 표시됩니다."}</span>
+              </div>
             ) : null}
           </div>
           <Pagination
@@ -257,6 +263,11 @@ function activityScore(issue: IssueSummary) {
   return issue.participant_count + issue.comment_count * 20;
 }
 
+function isIssueClosed(issue: IssueSummary) {
+  return issue.status === "CLOSED"
+    || (issue.closes_at !== null && parseApiDate(issue.closes_at).getTime() <= Date.now());
+}
+
 function remainingLabel(value: string | null) {
   if (!value) return "마감 미정";
   const milliseconds = parseApiDate(value).getTime() - Date.now();
@@ -264,16 +275,26 @@ function remainingLabel(value: string | null) {
   return days === 0 ? "오늘 마감" : `${days}일 후 마감`;
 }
 
+function closedLabel(value: string | null) {
+  if (!value) return "참여 마감";
+  return `${new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "Asia/Seoul",
+  }).format(parseApiDate(value))} 마감`;
+}
+
 function CommunityIssue({ issue }: { issue: IssueSummary }) {
+  const closed = isIssueClosed(issue);
   return (
     <article className="community-issue">
       <div className="community-issue-body">
-        <div className="community-issue-meta"><span>{issue.category}</span><span>토론 중</span><time>{remainingLabel(issue.closes_at)}</time></div>
+        <div className="community-issue-meta"><span>{issue.category}</span><span>{closed ? "마감" : "토론 중"}</span><time>{closed ? closedLabel(issue.closes_at) : remainingLabel(issue.closes_at)}</time></div>
         <Link href={`/issues/${issue.slug}`}><h3>{issue.question}</h3></Link>
         <div className="community-issue-footer">
           <span>참여 {formatNumber.format(issue.participant_count)}명 ·</span>
           <span>의견 {formatNumber.format(issue.comment_count)}개</span>
-          <Link href={`/issues/${issue.slug}`}>토론 들어가기 →</Link>
+          <Link href={`/issues/${issue.slug}`}>{closed ? "결과 보기" : "토론 들어가기"} →</Link>
         </div>
       </div>
     </article>

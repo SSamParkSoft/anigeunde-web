@@ -292,7 +292,7 @@ export function IssueView({ slug }: { slug: string }) {
   const selectedOption = issue.options.find((option) => option.id === issue.my_position_id);
   const sortedComments = [...comments].sort((a, b) => (
     commentSort === "popular"
-      ? popularityScore(b) - popularityScore(a) || parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime()
+      ? comparePopularity(a, b) || parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime()
       : parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime()
   ));
   const commentTotalPages = Math.max(1, Math.ceil(sortedComments.length / COMMENT_PAGE_SIZE));
@@ -325,7 +325,6 @@ export function IssueView({ slug }: { slug: string }) {
 
         {!issue.my_position_id && issue.participation_open ? (
           <section className="position-panel">
-            <div className="panel-label"><span>STEP 01</span><b>아니근데, 너는?</b></div>
             <>
               <h2>먼저 내 생각을 골라주세요.</h2>
               <p className="privacy-copy">선택하기 전에는 다른 참여자의 결과가 보이지 않습니다.</p>
@@ -333,7 +332,7 @@ export function IssueView({ slug }: { slug: string }) {
                 {issue.options.map((option, index) => (
                   <button onClick={() => choosePosition(option.id)} disabled={submitting} key={option.id}>
                     <span>{String(index + 1).padStart(2, "0")}</span>
-                    {option.label}
+                    {option.short_label}
                     <b>→</b>
                   </button>
                 ))}
@@ -389,7 +388,7 @@ export function IssueView({ slug }: { slug: string }) {
               {issue.participation_open ? <Composer title="의견을 남겨보세요." actionLabel="입력" onSubmit={submitOpinion} inline /> : <p className="consent-note">7일의 참여 기간이 종료되었습니다.</p>}
             </section>
             <aside className="results-sidebar">
-              <ResultPanel issue={issue} selectedLabel={selectedOption?.label ?? ""} onChange={() => setIssue({ ...issue, my_position_id: null, results: null })} />
+              <ResultPanel issue={issue} selectedLabel={selectedOption?.short_label ?? ""} onChange={() => setIssue({ ...issue, my_position_id: null, results: null })} />
             </aside>
             <div className="issue-share-mobile">
               <IssueShare slug={issue.slug} question={issue.question} />
@@ -666,8 +665,10 @@ function CommentCard({
   );
 }
 
-function popularityScore(comment: Comment) {
-  return comment.like_count * 2 + comment.rebuttal_count - comment.dislike_count;
+function comparePopularity(a: Comment, b: Comment) {
+  return b.like_count - a.like_count
+    || b.rebuttal_count - a.rebuttal_count
+    || b.dislike_count - a.dislike_count;
 }
 
 function formatCommentTime(value: string) {

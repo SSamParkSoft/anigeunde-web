@@ -5,6 +5,9 @@ import type {
   IssueDetail,
   IssueSummary,
   NewsCandidatePool,
+  NewsBatchFetchResult,
+  NewsFetchResult,
+  NewsSearchQuery,
   SelectedNewsDraft,
 } from "./types";
 import { getSupabaseBrowserClient } from "./supabase/client";
@@ -32,7 +35,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  session: () => request<{ authenticated: boolean; requires_bootstrap?: boolean }>("/api/v1/auth/session"),
+  session: () => request<{
+    authenticated: boolean;
+    requires_bootstrap?: boolean;
+    profile: {
+      id: string;
+      nickname: string;
+      role: "USER" | "EDITOR" | "ADMIN";
+      status: string;
+      age_gate_confirmed: boolean;
+    } | null;
+  }>("/api/v1/auth/session"),
   bootstrapProfile: () => request("/api/v1/profile/bootstrap", {
     method: "POST",
     body: JSON.stringify({
@@ -55,6 +68,61 @@ export const api = {
     request<NewsCandidatePool>(
       `/api/v1/admin/news/candidates?limit=200${category ? `&category=${encodeURIComponent(category)}` : ""}`,
     ),
+  newsQueries: () =>
+    request<{ items: NewsSearchQuery[] }>("/api/v1/admin/news/queries"),
+  createNewsQuery: (category: string, query: string) =>
+    request<NewsSearchQuery>("/api/v1/admin/news/queries", {
+      method: "POST",
+      body: JSON.stringify({ category, query }),
+    }),
+  updateNewsQuery: (item: NewsSearchQuery, category: string, query: string, enabled: boolean) =>
+    request<NewsSearchQuery>(`/api/v1/admin/news/queries/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        category,
+        query,
+        enabled,
+        interval_minutes: item.interval_minutes,
+        priority: item.priority,
+      }),
+    }),
+  deleteNewsQuery: (queryId: string) =>
+    request<{ query_id: string; deleted: boolean }>(`/api/v1/admin/news/queries/${queryId}`, {
+      method: "DELETE",
+    }),
+  fetchNewsQuery: (queryId: string) =>
+    request<NewsFetchResult>(`/api/v1/admin/news/queries/${queryId}/fetch`, {
+      method: "POST",
+    }),
+  fetchNewsQueries: (queryIds: string[]) =>
+    request<NewsBatchFetchResult>("/api/v1/admin/news/queries/fetch", {
+      method: "POST",
+      body: JSON.stringify({ query_ids: queryIds }),
+    }),
+  deleteNewsCandidate: (candidateId: string) =>
+    request<{ candidate_id: string; deleted: boolean }>(
+      `/api/v1/admin/news/candidates/${candidateId}`,
+      { method: "DELETE" },
+    ),
+  clearNewsCandidates: () =>
+    request<{ deleted_count: number; deleted_cluster_count: number }>(
+      "/api/v1/admin/news/candidates",
+      {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: "DELETE_ALL_CANDIDATES" }),
+      },
+    ),
+  clearNewsCandidatesByDate: (publishedDate: string) =>
+    request<{ published_date: string; deleted_count: number }>(
+      "/api/v1/admin/news/candidates/bulk/by-published-date",
+      {
+        method: "DELETE",
+        body: JSON.stringify({
+          published_date: publishedDate,
+          confirmation: "DELETE_PUBLISHED_DATE",
+        }),
+      },
+    ),
   selectNewsCluster: (clusterId: string) =>
     request<{ issue_id: string; status: string; duplicate_status: string }>(
       `/api/v1/admin/news/clusters/${clusterId}/select`,
@@ -65,6 +133,32 @@ export const api = {
   confirmSelectedNewsDraft: (issueId: string) =>
     request<AdminIssue>(`/api/v1/admin/news/selected-drafts/${issueId}/confirm`, {
       method: "POST",
+    }),
+  updateSelectedNewsDraft: (
+    issueId: string,
+    payload: {
+      question: string;
+      brief: string;
+      category: string;
+      options: Array<{ stance: "SUPPORT" | "OPPOSE"; label: string }>;
+    },
+  ) =>
+    request<AdminIssue>(`/api/v1/admin/news/selected-drafts/${issueId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteSelectedNewsDraft: (issueId: string) =>
+    request<{ issue_id: string; deleted: boolean; cluster_id: string; cluster_status: string | null }>(
+      `/api/v1/admin/news/selected-drafts/${issueId}`,
+      { method: "DELETE" },
+    ),
+  deleteSelectedNewsDrafts: (issueIds: string[]) =>
+    request<{ deleted_count: number }>("/api/v1/admin/news/selected-drafts", {
+      method: "DELETE",
+      body: JSON.stringify({
+        issue_ids: issueIds,
+        confirmation: "DELETE_SELECTED_DRAFTS",
+      }),
     }),
   issue: (slug: string) => request<IssueDetail>(`/api/v1/issues/${slug}`),
   comments: (issueId: string) =>

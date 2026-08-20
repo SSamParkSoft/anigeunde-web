@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Session } from "@supabase/supabase-js";
@@ -10,7 +11,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 
 export function HeaderAuth() {
+  const pathname = usePathname();
   const [session, setSession] = useState<Session | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -23,11 +26,13 @@ export function HeaderAuth() {
     async function syncSession(nextSession: Session | null) {
       setSession(nextSession);
       if (!nextSession) {
+        setIsAdmin(false);
         setMode("login");
         return;
       }
       try {
         const authSession = await api.session();
+        setIsAdmin(authSession.profile?.role === "ADMIN");
         if (authSession.requires_bootstrap) {
           setMode("signup");
           setOpen(true);
@@ -35,6 +40,7 @@ export function HeaderAuth() {
           setOpen(false);
         }
       } catch (reason) {
+        setIsAdmin(false);
         setError(reason instanceof Error ? reason.message : "계정 상태를 확인하지 못했습니다.");
       }
     }
@@ -93,6 +99,11 @@ export function HeaderAuth() {
 
   return (
     <div className="header-auth">
+      {isAdmin ? (
+        <Link href="/admin/news" className={`header-link header-admin-link${pathname.startsWith("/admin/") ? " active" : ""}`}>
+          뉴스 관리
+        </Link>
+      ) : null}
       {session ? (
         <button className="header-auth-button" type="button" onClick={() => void logout()} disabled={busy}>로그아웃</button>
       ) : (

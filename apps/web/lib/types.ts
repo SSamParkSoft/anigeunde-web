@@ -96,6 +96,40 @@ export type NewsCandidatePool = {
   items: NewsCandidate[];
   categories: string[];
   category_counts: Record<string, number>;
+  total_count: number;
+};
+
+export type NewsSearchQuery = {
+  id: string;
+  category: string;
+  query: string;
+  enabled: boolean;
+  interval_minutes: number;
+  priority: number;
+  last_fetched_at: string | null;
+};
+
+export type NewsFetchResult = {
+  run_id: string;
+  status: string;
+  received_count: number;
+  new_count: number;
+  duplicate_count: number;
+  filtered_count: number;
+  created_cluster_count: number;
+};
+
+export type NewsBatchFetchResult = {
+  items: Array<Partial<NewsFetchResult> & {
+    query_id: string;
+    query: string;
+    status: string;
+    error: string | null;
+  }>;
+  requested_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  created_cluster_count: number;
 };
 
 export type AdminIssue = {
