@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const issue = await loadIssue(slug);
   if (!issue) return { title: "주제 — 아니근데" };
   const url = `${SITE_URL}/issues/${encodeURIComponent(slug)}`;
-  const description = issue.brief.replace(/\s+/g, " ").slice(0, 150);
+  const description = "내 생각을 선택하고 다른 사람의 의견을 확인해보세요.";
   return {
     title: `${issue.question} — 아니근데`,
     description,
@@ -32,13 +32,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       siteName: "아니근데",
       title: "친구야, 너는 어떻게 생각해?",
       description: issue.question,
-      images: [{ url: "/share-card", width: 1200, height: 630, alt: "아니근데 주제 공유" }],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title: "친구야, 너는 어떻게 생각해?",
       description: issue.question,
-      images: ["/share-card"],
     },
   };
 }

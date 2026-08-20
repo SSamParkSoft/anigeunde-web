@@ -1,6 +1,7 @@
 import type {
   AdminIssue,
   Comment,
+  CommentReportReason,
   IssueDetail,
   IssueSummary,
   NewsCandidatePool,
@@ -90,6 +91,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ body }),
     }),
+  deleteComment: (commentId: string) =>
+    request<void>(`/api/v1/comments/${commentId}`, { method: "DELETE" }),
+  reportComment: (commentId: string, reasonCode: CommentReportReason, description: string) =>
+    request<{ id: string; status: string; duplicate: boolean }>(
+      `/api/v1/comments/${commentId}/reports`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason_code: reasonCode, description }),
+      },
+    ),
+  blockCommentAuthor: (commentId: string) =>
+    request<{ blocked: boolean }>(`/api/v1/comments/${commentId}/author-block`, {
+      method: "PUT",
+    }),
+  unblockCommentAuthor: (commentId: string) =>
+    request<void>(`/api/v1/comments/${commentId}/author-block`, { method: "DELETE" }),
   toggleReaction: async (comment: Comment, type: "like" | "dislike") => {
     const normalized = type === "like" ? "LIKE" : "DISLIKE";
     const active = comment.viewer_reactions.includes(normalized);

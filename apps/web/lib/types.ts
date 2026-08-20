@@ -8,7 +8,6 @@ export type IssueSummary = {
   featured: boolean;
   participant_count: number;
   comment_count: number;
-  source_count: number;
   published_at: string | null;
   closes_at: string | null;
 };
@@ -43,13 +42,6 @@ export type IssueDetail = {
   participation_open: boolean;
   updated_at: string;
   options: IssueOption[];
-  sources: Array<{
-    id: string;
-    title: string;
-    publisher: string;
-    url: string;
-    source_type: string;
-  }>;
   my_position_id: string | null;
   results: IssueResult | null;
 };
@@ -63,12 +55,24 @@ export type Comment = {
   depth: number;
   parent_id: string | null;
   is_mine: boolean;
+  can_delete: boolean;
+  is_deleted: boolean;
+  is_blocked: boolean;
   like_count: number;
   dislike_count: number;
   rebuttal_count: number;
   viewer_reactions: string[];
   replies: Comment[];
 };
+
+export type CommentReportReason =
+  | "POLICY_VIOLATION"
+  | "HARASSMENT_OR_HATE"
+  | "FALSE_OR_DEFAMATORY"
+  | "PRIVACY"
+  | "ILLEGAL_OR_DANGEROUS"
+  | "SPAM"
+  | "OTHER";
 
 export type NewsCandidate = {
   id: string;

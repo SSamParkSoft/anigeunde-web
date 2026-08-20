@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { api } from "@/lib/api";
+import { apiTimestamp, parseApiDate } from "@/lib/datetime";
 import type { IssueSummary } from "@/lib/types";
+import { Pagination } from "@/components/pagination";
 
 const formatNumber = new Intl.NumberFormat("ko-KR");
+const ISSUE_PAGE_SIZE = 8;
 
 export function Home() {
   const [issues, setIssues] = useState<IssueSummary[]>([]);
@@ -13,6 +16,11 @@ export function Home() {
   const [sort, setSort] = useState("활발한");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [issuePage, setIssuePage] = useState(1);
+  const [mobilePanel, setMobilePanel] = useState<"ranking" | "guide" | null>(null);
+  const [sheetDragOffset, setSheetDragOffset] = useState(0);
+  const sheetDragStart = useRef<number | null>(null);
+  const sheetDragDistance = useRef(0);
 
   useEffect(() => {
     api.issues()
@@ -21,21 +29,61 @@ export function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!mobilePanel) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobilePanel(null);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobilePanel]);
+
   const categories = useMemo(
     () => ["전체", ...Array.from(new Set(issues.map((issue) => issue.category)))],
     [issues],
   );
   const filtered = category === "전체" ? issues : issues.filter((issue) => issue.category === category);
   const visible = [...filtered].sort((a, b) => {
-    if (sort === "최신") return timestamp(b.published_at, 0) - timestamp(a.published_at, 0);
+    if (sort === "최신") return apiTimestamp(b.published_at, 0) - apiTimestamp(a.published_at, 0);
     if (sort === "마감임박") {
-      return timestamp(a.closes_at, Number.MAX_SAFE_INTEGER)
-        - timestamp(b.closes_at, Number.MAX_SAFE_INTEGER);
+      return apiTimestamp(a.closes_at, Number.MAX_SAFE_INTEGER)
+        - apiTimestamp(b.closes_at, Number.MAX_SAFE_INTEGER);
     }
     return activityScore(b) - activityScore(a);
   });
   const rankedIssues = [...issues].sort((a, b) => activityScore(b) - activityScore(a));
   const hottest = rankedIssues[0];
+  const issueTotalPages = Math.max(1, Math.ceil(visible.length / ISSUE_PAGE_SIZE));
+  const currentIssuePage = Math.min(issuePage, issueTotalPages);
+  const pagedIssues = visible.slice(
+    (currentIssuePage - 1) * ISSUE_PAGE_SIZE,
+    currentIssuePage * ISSUE_PAGE_SIZE,
+  );
+
+  function startSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    sheetDragStart.current = event.clientY;
+    sheetDragDistance.current = 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveSheetDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (sheetDragStart.current === null) return;
+    const distance = Math.max(0, event.clientY - sheetDragStart.current);
+    sheetDragDistance.current = distance;
+    setSheetDragOffset(distance);
+  }
+
+  function endSheetDrag() {
+    if (sheetDragDistance.current >= 80) setMobilePanel(null);
+    sheetDragStart.current = null;
+    sheetDragDistance.current = 0;
+    setSheetDragOffset(0);
+  }
 
   return (
     <main className="community-page">
@@ -55,8 +103,7 @@ export function Home() {
             <strong>인</strong>
           </div>
           <div className="participation-live">
-            <em>실제 참여만 집계</em>
-            <span><i /> API 실시간 반영</span>
+            <span><i /> 실시간 반영</span>
           </div>
         </div>
 
@@ -72,12 +119,10 @@ export function Home() {
                 <span>{hottest.category} · 실시간 1위</span>
               </div>
               <h2>{hottest.question}</h2>
-              <p>{hottest.brief}</p>
               <div className="hot-footer">
                 <div>
                   <span><b>{formatNumber.format(hottest.participant_count)}</b>인 참여</span>
                   <span><b>{hottest.comment_count}</b>개 의견</span>
-                  <span className="hot-surge">자료 {hottest.source_count}건</span>
                 </div>
                 <strong>지금 토론 참여하기 →</strong>
               </div>
@@ -87,12 +132,12 @@ export function Home() {
           <div className="feed-controls">
             <div className="sort-tabs" aria-label="정렬">
               {["활발한", "최신", "마감임박"].map((item) => (
-                <button key={item} className={sort === item ? "active" : ""} onClick={() => setSort(item)}>{item}</button>
+                <button key={item} className={sort === item ? "active" : ""} onClick={() => { setSort(item); setIssuePage(1); }}>{item}</button>
               ))}
             </div>
             <div className="category-select">
               {categories.map((item) => (
-                <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>
+                <button key={item} className={category === item ? "active" : ""} onClick={() => { setCategory(item); setIssuePage(1); }}>{item}</button>
               ))}
             </div>
           </div>
@@ -103,12 +148,21 @@ export function Home() {
           </div>
 
           <div className="community-issue-list">
-            {visible.map((issue) => <CommunityIssue issue={issue} key={issue.id} />)}
+            {pagedIssues.map((issue) => <CommunityIssue issue={issue} key={issue.id} />)}
             {loading ? [1, 2, 3].map((item) => <div className="community-skeleton" key={item} />) : null}
             {!loading && !issues.length && !error ? (
               <div className="community-error"><b>현재 열린 주제가 없습니다.</b><span>검수가 끝난 새 주제가 발행되면 여기에 표시됩니다.</span></div>
             ) : null}
           </div>
+          <Pagination
+            currentPage={currentIssuePage}
+            totalPages={issueTotalPages}
+            label="주제 목록 페이지"
+            onPageChange={(page) => {
+              setIssuePage(page);
+              document.querySelector(".feed-title-row")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          />
         </section>
 
         <aside className="community-sidebar">
@@ -136,6 +190,64 @@ export function Home() {
 
           <p className="sidebar-notice">참여 결과는 여론조사가 아니며 전체 사회를 대표하지 않습니다.</p>
         </aside>
+
+        <div className="mobile-community-tools" role="group" aria-label="커뮤니티 정보">
+          <button type="button" onClick={() => setMobilePanel("ranking")}>🔥 주제 랭킹</button>
+        </div>
+
+        {mobilePanel ? (
+          <div className="mobile-community-sheet-backdrop" onClick={() => setMobilePanel(null)}>
+            <section
+              className="mobile-community-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label={mobilePanel === "ranking" ? "주제 랭킹" : "대화 가이드"}
+              onClick={(event) => event.stopPropagation()}
+              style={{ transform: `translateY(${sheetDragOffset}px)` }}
+            >
+              <div
+                className="mobile-sheet-drag-area"
+                aria-hidden="true"
+                onPointerDown={startSheetDrag}
+                onPointerMove={moveSheetDrag}
+                onPointerUp={endSheetDrag}
+                onPointerCancel={endSheetDrag}
+              >
+                <div className="mobile-sheet-handle" />
+              </div>
+              <header>
+                <div className="mobile-sheet-tabs" role="tablist" aria-label="커뮤니티 정보 선택">
+                  <button type="button" role="tab" aria-selected={mobilePanel === "ranking"} className={mobilePanel === "ranking" ? "active" : ""} onClick={() => setMobilePanel("ranking")}>🔥 주제 랭킹</button>
+                  <button type="button" role="tab" aria-selected={mobilePanel === "guide"} className={mobilePanel === "guide" ? "active" : ""} onClick={() => setMobilePanel("guide")}>대화 가이드</button>
+                </div>
+                <button className="mobile-sheet-close" type="button" aria-label="닫기" onClick={() => setMobilePanel(null)}>×</button>
+              </header>
+
+              {mobilePanel === "ranking" ? (
+                <div className="mobile-sheet-ranking">
+                  <div className="sidebar-heading ranking-heading"><b>실시간 주제 랭킹</b><span>실시간</span></div>
+                  <ol className="ranking-list">
+                    {rankedIssues.map((issue, index) => (
+                      <li className={index === 0 ? "rank-first" : ""} key={issue.id}>
+                        <b>{index + 1}</b>
+                        <Link href={`/issues/${issue.slug}`} onClick={() => setMobilePanel(null)}>{issue.question}</Link>
+                        <span>{index === 0 ? "🔥" : "↗"}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="ranking-basis">참여와 댓글 활동 기준 · 실시간 반영</p>
+                </div>
+              ) : (
+                <div className="mobile-sheet-guide">
+                  <p><b>01</b> 사람 말고 주장에 댓글 달기</p>
+                  <p><b>02</b> 사실을 말할 땐 출처 붙이기</p>
+                  <p><b>03</b> 생각이 바뀌면 솔직하게 누르기</p>
+                  <Link href="/community-guidelines" onClick={() => setMobilePanel(null)}>커뮤니티 운영원칙 보기 →</Link>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
       </div>
     </main>
   );
@@ -145,13 +257,9 @@ function activityScore(issue: IssueSummary) {
   return issue.participant_count + issue.comment_count * 20;
 }
 
-function timestamp(value: string | null, fallback: number) {
-  return value ? new Date(value).getTime() : fallback;
-}
-
 function remainingLabel(value: string | null) {
   if (!value) return "마감 미정";
-  const milliseconds = new Date(value).getTime() - Date.now();
+  const milliseconds = parseApiDate(value).getTime() - Date.now();
   const days = Math.max(0, Math.ceil(milliseconds / 86_400_000));
   return days === 0 ? "오늘 마감" : `${days}일 후 마감`;
 }
@@ -159,14 +267,12 @@ function remainingLabel(value: string | null) {
 function CommunityIssue({ issue }: { issue: IssueSummary }) {
   return (
     <article className="community-issue">
-      <div className="issue-vote-box"><span>참여</span><b>{formatNumber.format(issue.participant_count)}</b></div>
       <div className="community-issue-body">
         <div className="community-issue-meta"><span>{issue.category}</span><span>토론 중</span><time>{remainingLabel(issue.closes_at)}</time></div>
         <Link href={`/issues/${issue.slug}`}><h3>{issue.question}</h3></Link>
-        <p>{issue.brief}</p>
         <div className="community-issue-footer">
-          <span>💬 의견 {issue.comment_count}</span>
-          <span>🔗 자료 {issue.source_count}</span>
+          <span>참여 {formatNumber.format(issue.participant_count)}명 ·</span>
+          <span>의견 {formatNumber.format(issue.comment_count)}개</span>
           <Link href={`/issues/${issue.slug}`}>토론 들어가기 →</Link>
         </div>
       </div>

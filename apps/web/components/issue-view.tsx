@@ -11,20 +11,26 @@ import {
   type PendingParticipation,
 } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { parseApiDate } from "@/lib/datetime";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { Comment, IssueDetail } from "@/lib/types";
+import type { Comment, CommentReportReason, IssueDetail } from "@/lib/types";
 import { SocialLoginButtons } from "@/components/social-login-buttons";
 import { IssueShare } from "@/components/issue-share";
+import { Pagination } from "@/components/pagination";
+
+const COMMENT_PAGE_SIZE = 20;
 
 export function IssueView({ slug }: { slug: string }) {
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [commentSort, setCommentSort] = useState<"latest" | "popular">("popular");
+  const [commentPage, setCommentPage] = useState(1);
   const [accountReadyVersion, setAccountReadyVersion] = useState(0);
   const pendingParticipation = useRef<PendingParticipation | null>(null);
   const resumingLogin = useRef(false);
@@ -50,6 +56,12 @@ export function IssueView({ slug }: { slug: string }) {
     window.addEventListener(ACCOUNT_READY_EVENT, handleAccountReady);
     return () => window.removeEventListener(ACCOUNT_READY_EVENT, handleAccountReady);
   }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     let active = true;
@@ -182,6 +194,7 @@ export function IssueView({ slug }: { slug: string }) {
     if (!issue) return;
     const created = await api.createComment(issue.id, body);
     setComments((current) => [created, ...current]);
+    setCommentPage(1);
   }
 
   async function submitOpinion(body: string) {
@@ -201,8 +214,66 @@ export function IssueView({ slug }: { slug: string }) {
 
   async function createRebuttal(commentId: string, body: string) {
     await api.createRebuttal(commentId, body);
-    const refreshed = await api.comments(issue!.id);
+    await refreshComments();
+  }
+
+  async function refreshComments() {
+    if (!issue) return;
+    const refreshed = await api.comments(issue.id);
     setComments(refreshed.items);
+  }
+
+  function requireLogin(action: () => void | Promise<void>) {
+    if (isAuthenticated) {
+      void action();
+      return;
+    }
+    pendingParticipation.current = { version: 1, issueSlug: slug, kind: "retry" };
+    setLoginOpen(true);
+  }
+
+  async function deleteComment(comment: Comment) {
+    try {
+      await api.deleteComment(comment.id);
+      await refreshComments();
+      setNotice("의견을 삭제했습니다.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "의견을 삭제하지 못했습니다.");
+    }
+  }
+
+  async function reportComment(
+    comment: Comment,
+    reasonCode: CommentReportReason,
+    description: string,
+  ) {
+    try {
+      const result = await api.reportComment(comment.id, reasonCode, description);
+      setNotice(result.duplicate ? "이미 접수된 신고입니다." : "신고가 접수되었습니다.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "신고를 접수하지 못했습니다.");
+      throw reason;
+    }
+  }
+
+  async function blockCommentAuthor(comment: Comment) {
+    try {
+      await api.blockCommentAuthor(comment.id);
+      await refreshComments();
+      setNotice("이 이용자의 의견을 가렸습니다.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "이용자를 차단하지 못했습니다.");
+    }
+  }
+
+  async function unblockCommentAuthor(comment: Comment) {
+    try {
+      await api.unblockCommentAuthor(comment.id);
+      await refreshComments();
+      setNotice("이용자 차단을 해제했습니다.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "차단을 해제하지 못했습니다.");
+    }
   }
 
   async function react(comment: Comment, type: "like" | "dislike") {
@@ -221,9 +292,20 @@ export function IssueView({ slug }: { slug: string }) {
   const selectedOption = issue.options.find((option) => option.id === issue.my_position_id);
   const sortedComments = [...comments].sort((a, b) => (
     commentSort === "popular"
-      ? popularityScore(b) - popularityScore(a) || Date.parse(b.created_at) - Date.parse(a.created_at)
-      : Date.parse(b.created_at) - Date.parse(a.created_at)
+      ? popularityScore(b) - popularityScore(a) || parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime()
+      : parseApiDate(b.created_at).getTime() - parseApiDate(a.created_at).getTime()
   ));
+  const commentTotalPages = Math.max(1, Math.ceil(sortedComments.length / COMMENT_PAGE_SIZE));
+  const currentCommentPage = Math.min(commentPage, commentTotalPages);
+  const pagedComments = sortedComments.slice(
+    (currentCommentPage - 1) * COMMENT_PAGE_SIZE,
+    currentCommentPage * COMMENT_PAGE_SIZE,
+  );
+
+  function changeCommentPage(page: number) {
+    setCommentPage(page);
+    document.querySelector(".discussion-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
     <main className="issue-page">
@@ -235,22 +317,11 @@ export function IssueView({ slug }: { slug: string }) {
             <span>업데이트 2026.08.18</span>
           </div>
           <h1>{issue.question}</h1>
-          <p>{issue.brief}</p>
         </section>
 
-        <IssueShare slug={issue.slug} question={issue.question} />
-
-        <section className="source-strip">
-          <span className="source-title">참고자료 {String(issue.sources.length).padStart(2, "0")}</span>
-          <div>
-            {issue.sources.map((source) => (
-              <a href={source.url} target="_blank" rel="noreferrer" key={source.id}>
-                <small>{source.publisher}</small>
-                {source.title}<b>↗</b>
-              </a>
-            ))}
-          </div>
-        </section>
+        <div className="issue-share-desktop">
+          <IssueShare slug={issue.slug} question={issue.question} />
+        </div>
 
         {!issue.my_position_id && issue.participation_open ? (
           <section className="position-panel">
@@ -267,14 +338,21 @@ export function IssueView({ slug }: { slug: string }) {
                   </button>
                 ))}
               </div>
-              <small className="consent-note">선택 시 정치적 견해에 해당할 수 있는 정보 처리에 동의합니다. 데모 데이터는 로컬에만 저장됩니다.</small>
+              <small className="consent-note">선택 시 정치적 견해에 해당할 수 있는 정보 처리에 동의합니다.</small>
             </>
           </section>
         ) : !issue.my_position_id ? (
           <section className="position-panel"><h2>참여가 마감된 주제입니다.</h2><p>기존 의견과 결과는 계속 확인할 수 있습니다.</p>{issue.results ? <ResultPanel issue={issue} selectedLabel="" onChange={() => undefined} /> : null}</section>
         ) : null}
 
+        {!issue.my_position_id ? (
+          <div className="issue-share-mobile">
+            <IssueShare slug={issue.slug} question={issue.question} />
+          </div>
+        ) : null}
+
         {error ? <div className="inline-error">{error}</div> : null}
+        {notice ? <div className="action-toast" role="status" aria-live="polite">{notice}</div> : null}
 
         {issue.my_position_id ? (
           <div className="discussion-layout">
@@ -285,28 +363,37 @@ export function IssueView({ slug }: { slug: string }) {
               <div className="discussion-toolbar">
                 <span>{comments.length}개의 의견</span>
                 <div className="comment-sort-toggle" role="group" aria-label="의견 정렬">
-                  <button className={commentSort === "popular" ? "active" : ""} onClick={() => setCommentSort("popular")}>인기순</button>
-                  <button className={commentSort === "latest" ? "active" : ""} onClick={() => setCommentSort("latest")}>최신순</button>
+                  <button className={commentSort === "popular" ? "active" : ""} onClick={() => { setCommentSort("popular"); setCommentPage(1); }}>인기순</button>
+                  <button className={commentSort === "latest" ? "active" : ""} onClick={() => { setCommentSort("latest"); setCommentPage(1); }}>최신순</button>
                 </div>
               </div>
               <div className="comment-list">
-                {sortedComments.map((comment, index) => (
+                {pagedComments.map((comment, index) => (
                   <CommentCard
                     comment={comment}
-                    index={index}
+                    index={(currentCommentPage - 1) * COMMENT_PAGE_SIZE + index}
                     key={comment.id}
                     onReact={react}
                     onRebuttal={createRebuttal}
                     requireParticipation={requireParticipation}
+                    requireLogin={requireLogin}
+                    onDelete={deleteComment}
+                    onReport={reportComment}
+                    onBlock={blockCommentAuthor}
+                    onUnblock={unblockCommentAuthor}
                     participationOpen={issue.participation_open}
                   />
                 ))}
               </div>
+              <Pagination currentPage={currentCommentPage} totalPages={commentTotalPages} label="의견 목록 페이지" onPageChange={changeCommentPage} />
               {issue.participation_open ? <Composer title="의견을 남겨보세요." actionLabel="입력" onSubmit={submitOpinion} inline /> : <p className="consent-note">7일의 참여 기간이 종료되었습니다.</p>}
             </section>
             <aside className="results-sidebar">
               <ResultPanel issue={issue} selectedLabel={selectedOption?.label ?? ""} onChange={() => setIssue({ ...issue, my_position_id: null, results: null })} />
             </aside>
+            <div className="issue-share-mobile">
+              <IssueShare slug={issue.slug} question={issue.question} />
+            </div>
           </div>
         ) : (
           <section className="discussion-section public-discussion">
@@ -316,15 +403,29 @@ export function IssueView({ slug }: { slug: string }) {
             <div className="discussion-toolbar">
               <span>{comments.length}개의 의견</span>
               <div className="comment-sort-toggle" role="group" aria-label="의견 정렬">
-                <button className={commentSort === "popular" ? "active" : ""} onClick={() => setCommentSort("popular")}>인기순</button>
-                <button className={commentSort === "latest" ? "active" : ""} onClick={() => setCommentSort("latest")}>최신순</button>
+                <button className={commentSort === "popular" ? "active" : ""} onClick={() => { setCommentSort("popular"); setCommentPage(1); }}>인기순</button>
+                <button className={commentSort === "latest" ? "active" : ""} onClick={() => { setCommentSort("latest"); setCommentPage(1); }}>최신순</button>
               </div>
             </div>
             <div className="comment-list">
-              {sortedComments.map((comment, index) => (
-                <CommentCard comment={comment} index={index} key={comment.id} onReact={react} onRebuttal={createRebuttal} requireParticipation={requireParticipation} participationOpen={issue.participation_open} />
+              {pagedComments.map((comment, index) => (
+                <CommentCard
+                  comment={comment}
+                  index={(currentCommentPage - 1) * COMMENT_PAGE_SIZE + index}
+                  key={comment.id}
+                  onReact={react}
+                  onRebuttal={createRebuttal}
+                  requireParticipation={requireParticipation}
+                  requireLogin={requireLogin}
+                  onDelete={deleteComment}
+                  onReport={reportComment}
+                  onBlock={blockCommentAuthor}
+                  onUnblock={unblockCommentAuthor}
+                  participationOpen={issue.participation_open}
+                />
               ))}
             </div>
+            <Pagination currentPage={currentCommentPage} totalPages={commentTotalPages} label="의견 목록 페이지" onPageChange={changeCommentPage} />
             {issue.participation_open ? <Composer title="의견을 남겨보세요." actionLabel="입력" onSubmit={submitOpinion} inline /> : <p className="consent-note">7일의 참여 기간이 종료되었습니다.</p>}
           </section>
         )}
@@ -360,43 +461,186 @@ function ResultPanel({ issue, selectedLabel, onChange }: { issue: IssueDetail; s
   );
 }
 
-function CommentCard({ comment, index, onReact, onRebuttal, requireParticipation, participationOpen, parentNickname }: {
+const reportReasons: Array<{ value: CommentReportReason; label: string }> = [
+  { value: "POLICY_VIOLATION", label: "운영정책 위반" },
+  { value: "HARASSMENT_OR_HATE", label: "괴롭힘·욕설·혐오" },
+  { value: "FALSE_OR_DEFAMATORY", label: "허위사실·명예훼손" },
+  { value: "PRIVACY", label: "개인정보 노출" },
+  { value: "ILLEGAL_OR_DANGEROUS", label: "불법·위험 콘텐츠" },
+  { value: "SPAM", label: "도배·광고" },
+  { value: "OTHER", label: "기타" },
+];
+
+function CommentCard({
+  comment,
+  index,
+  onReact,
+  onRebuttal,
+  requireParticipation,
+  requireLogin,
+  onDelete,
+  onReport,
+  onBlock,
+  onUnblock,
+  participationOpen,
+  parentNickname,
+}: {
   comment: Comment;
   index: number;
   onReact: (comment: Comment, type: "like" | "dislike") => Promise<void>;
   onRebuttal: (commentId: string, body: string) => Promise<void>;
   requireParticipation: (action: () => void | Promise<void>) => void;
+  requireLogin: (action: () => void | Promise<void>) => void;
+  onDelete: (comment: Comment) => Promise<void>;
+  onReport: (
+    comment: Comment,
+    reasonCode: CommentReportReason,
+    description: string,
+  ) => Promise<void>;
+  onBlock: (comment: Comment) => Promise<void>;
+  onUnblock: (comment: Comment) => Promise<void>;
   participationOpen: boolean;
   parentNickname?: string;
 }) {
   const [replying, setReplying] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportReason, setReportReason] = useState<CommentReportReason>("POLICY_VIOLATION");
+  const [reportDescription, setReportDescription] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"delete" | "block" | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!confirmAction) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setConfirmAction(null);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [confirmAction]);
+
+  async function submitReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setActionBusy(true);
+    try {
+      await onReport(comment, reportReason, reportDescription);
+      setReporting(false);
+      setMenuOpen(false);
+      setReportDescription("");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  function requestConfirmation(action: "delete" | "block") {
+    setMenuOpen(false);
+    setConfirmAction(action);
+  }
+
+  function runConfirmedAction() {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (action === "delete") requireLogin(() => onDelete(comment));
+    if (action === "block") requireLogin(() => onBlock(comment));
+  }
+
   return (
     <div className={`comment-thread comment-depth-${Math.min(comment.depth, 2)}`}>
-      <article className="comment-card">
+      <article className={`comment-card${comment.is_deleted ? " is-deleted" : ""}${comment.is_blocked ? " is-blocked" : ""}`}>
         <div className="comment-index">#{String(index + 1).padStart(2, "0")}</div>
         <div className="comment-main">
           <header>
             <div><b>{comment.nickname}</b><span>{comment.position} · {formatCommentTime(comment.created_at)}</span></div>
-            {comment.is_mine ? <em>내 의견</em> : null}
+            <div className="comment-header-actions">
+              {comment.is_mine && !comment.is_deleted ? <em>내 의견</em> : null}
+              {!comment.is_deleted && !comment.is_blocked ? (
+                <div className="comment-menu" ref={menuRef}>
+                  <button type="button" className="comment-menu-trigger" aria-label="의견 메뉴" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>···</button>
+                  {menuOpen ? (
+                    <div className="comment-menu-popover">
+                      {comment.can_delete ? (
+                        <button type="button" className="danger" onClick={() => requestConfirmation("delete")}>삭제하기</button>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => requireLogin(() => { setReporting(true); setMenuOpen(false); })}>신고하기</button>
+                          <button type="button" onClick={() => requestConfirmation("block")}>이 사용자 차단</button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </header>
-          <p>
+          <p className={comment.is_deleted || comment.is_blocked ? "comment-placeholder" : undefined}>
             {parentNickname ? <b className="reply-target">@{parentNickname}</b> : null}
             {comment.body}
           </p>
-          <div className="comment-actions">
-            <button disabled={!participationOpen} className={comment.viewer_reactions.includes("LIKE") ? "active" : ""} onClick={() => requireParticipation(() => onReact(comment, "like"))}>
-              좋아요 <b>{comment.like_count}</b>
-            </button>
-            <button disabled={!participationOpen} className={comment.viewer_reactions.includes("DISLIKE") ? "active dark" : ""} onClick={() => requireParticipation(() => onReact(comment, "dislike"))}>
-              싫어요 <b>{comment.dislike_count}</b>
-            </button>
-            <button disabled={!participationOpen} className="rebuttal-button" onClick={() => requireParticipation(() => setReplying((value) => !value))}>
-              댓글 <b>{comment.rebuttal_count}</b> <span>↳</span>
-            </button>
-          </div>
+          {comment.is_blocked ? (
+            <div className="comment-actions"><button type="button" onClick={() => requireLogin(() => onUnblock(comment))}>차단 해제</button></div>
+          ) : !comment.is_deleted ? (
+            <div className="comment-actions">
+              <button disabled={!participationOpen} className={comment.viewer_reactions.includes("LIKE") ? "active" : ""} onClick={() => requireParticipation(() => onReact(comment, "like"))}>
+                좋아요 <b>{comment.like_count}</b>
+              </button>
+              <button disabled={!participationOpen} className={comment.viewer_reactions.includes("DISLIKE") ? "active dark" : ""} onClick={() => requireParticipation(() => onReact(comment, "dislike"))}>
+                싫어요 <b>{comment.dislike_count}</b>
+              </button>
+              <button disabled={!participationOpen} className="rebuttal-button" onClick={() => requireParticipation(() => setReplying((value) => !value))}>
+                댓글 <b>{comment.rebuttal_count}</b> <span>↳</span>
+              </button>
+            </div>
+          ) : null}
+          {reporting ? (
+            <form className="comment-report-form" onSubmit={submitReport}>
+              <label>
+                신고 사유
+                <select value={reportReason} onChange={(event) => setReportReason(event.target.value as CommentReportReason)}>
+                  {reportReasons.map((reason) => <option value={reason.value} key={reason.value}>{reason.label}</option>)}
+                </select>
+              </label>
+              <label>
+                추가 설명 <small>선택</small>
+                <textarea maxLength={500} value={reportDescription} onChange={(event) => setReportDescription(event.target.value)} placeholder="운영자가 확인할 내용을 적어주세요." />
+              </label>
+              <div><button type="button" onClick={() => setReporting(false)}>취소</button><button type="submit" disabled={actionBusy}>신고 접수</button></div>
+            </form>
+          ) : null}
           {replying ? <Composer title={`@${comment.nickname}에게 댓글`} actionLabel="댓글 달기" onSubmit={async (body) => { await onRebuttal(comment.id, body); setReplying(false); }} compact /> : null}
         </div>
       </article>
+      {confirmAction ? (
+        <div className="comment-confirm-backdrop" role="presentation" onMouseDown={() => setConfirmAction(null)}>
+          <section className="comment-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby={`comment-confirm-${comment.id}`} onMouseDown={(event) => event.stopPropagation()}>
+            <h2 id={`comment-confirm-${comment.id}`}>{confirmAction === "delete" ? "의견을 삭제할까요?" : "이 사용자를 차단할까요?"}</h2>
+            <p>{confirmAction === "delete" ? "답글이 있으면 삭제 안내 문구만 남습니다." : "이 사용자의 의견이 가려지며 언제든 차단을 해제할 수 있습니다."}</p>
+            <div>
+              <button type="button" onClick={() => setConfirmAction(null)}>취소</button>
+              <button type="button" className={confirmAction === "delete" ? "danger" : "primary"} onClick={runConfirmedAction}>{confirmAction === "delete" ? "삭제" : "차단"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {comment.replies?.length ? (
         <div className="reply-list">
           {comment.replies.map((reply, replyIndex) => (
@@ -407,8 +651,13 @@ function CommentCard({ comment, index, onReact, onRebuttal, requireParticipation
               onReact={onReact}
               onRebuttal={onRebuttal}
               requireParticipation={requireParticipation}
+              requireLogin={requireLogin}
+              onDelete={onDelete}
+              onReport={onReport}
+              onBlock={onBlock}
+              onUnblock={onUnblock}
               participationOpen={participationOpen}
-              parentNickname={comment.nickname}
+              parentNickname={comment.is_deleted || comment.is_blocked ? undefined : comment.nickname}
             />
           ))}
         </div>
@@ -427,7 +676,8 @@ function formatCommentTime(value: string) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+    timeZone: "Asia/Seoul",
+  }).format(parseApiDate(value));
 }
 
 function LoginGate({ onClose, isAuthenticated, onConsentComplete, onProvider }: {
@@ -504,6 +754,7 @@ function Composer({ title, actionLabel, onSubmit, compact = false, inline = fals
   const [error, setError] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     if (body.trim().length === 0) { setError("내용을 입력해주세요."); return; }
     setBusy(true);
     try {
@@ -516,7 +767,19 @@ function Composer({ title, actionLabel, onSubmit, compact = false, inline = fals
   return (
     <form className={`composer ${compact ? "compact" : ""} ${inline ? "inline" : ""}`} onSubmit={submit}>
       <label htmlFor={`composer-${title}`}>{title}</label>
-      <textarea id={`composer-${title}`} value={body} onChange={(event) => setBody(event.target.value)} maxLength={2000} placeholder="주장과 이유를 함께 적어주세요." />
+      <textarea
+        id={`composer-${title}`}
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          event.currentTarget.form?.requestSubmit();
+        }}
+        maxLength={2000}
+        enterKeyHint="send"
+        placeholder="주장과 이유를 함께 적어주세요."
+      />
       <div><span className={error ? "form-error" : ""}>{error || `${body.length} / 2,000`}</span><button disabled={busy}>{busy ? "올리는 중" : actionLabel} →</button></div>
     </form>
   );

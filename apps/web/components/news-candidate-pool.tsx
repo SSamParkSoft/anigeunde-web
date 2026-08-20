@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { parseApiDate } from "@/lib/datetime";
 import type {
   NewsCandidate,
   NewsCandidatePool as CandidatePoolResponse,
@@ -39,7 +40,8 @@ function formatTime(value: string) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+    timeZone: "Asia/Seoul",
+  }).format(parseApiDate(value));
 }
 
 function DraftConfirmation({ refreshToken }: { refreshToken: number }) {
