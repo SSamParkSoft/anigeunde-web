@@ -12,16 +12,28 @@ export function Home() {
   const [category, setCategory] = useState("전체");
   const [sort, setSort] = useState("활발한");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.issues().then(({ items }) => setIssues(items)).catch((reason: Error) => setError(reason.message));
+    api.issues()
+      .then(({ items }) => setIssues(items))
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false));
   }, []);
 
   const categories = useMemo(
     () => ["전체", ...Array.from(new Set(issues.map((issue) => issue.category)))],
     [issues],
   );
-  const visible = category === "전체" ? issues : issues.filter((issue) => issue.category === category);
+  const filtered = category === "전체" ? issues : issues.filter((issue) => issue.category === category);
+  const visible = [...filtered].sort((a, b) => {
+    if (sort === "최신") return timestamp(b.published_at, 0) - timestamp(a.published_at, 0);
+    if (sort === "마감임박") {
+      return timestamp(a.closes_at, Number.MAX_SAFE_INTEGER)
+        - timestamp(b.closes_at, Number.MAX_SAFE_INTEGER);
+    }
+    return activityScore(b) - activityScore(a);
+  });
   const rankedIssues = [...issues].sort((a, b) => activityScore(b) - activityScore(a));
   const hottest = rankedIssues[0];
 
@@ -43,8 +55,8 @@ export function Home() {
             <strong>인</strong>
           </div>
           <div className="participation-live">
-            <em>오늘 +128</em>
-            <span><i /> 실시간 집계</span>
+            <em>실제 참여만 집계</em>
+            <span><i /> API 실시간 반영</span>
           </div>
         </div>
 
@@ -56,7 +68,7 @@ export function Home() {
           {hottest ? (
             <Link href={`/issues/${hottest.slug}`} className="hot-issue">
               <div className="hot-topline">
-                <span><i /> 지금 가장 뜨거운 쟁점</span>
+                <span><i /> 지금 가장 뜨거운 주제</span>
                 <span>{hottest.category} · 실시간 1위</span>
               </div>
               <h2>{hottest.question}</h2>
@@ -65,7 +77,7 @@ export function Home() {
                 <div>
                   <span><b>{formatNumber.format(hottest.participant_count)}</b>인 참여</span>
                   <span><b>{hottest.comment_count}</b>개 의견</span>
-                  <span className="hot-surge">참여 속도 1위</span>
+                  <span className="hot-surge">자료 {hottest.source_count}건</span>
                 </div>
                 <strong>지금 토론 참여하기 →</strong>
               </div>
@@ -86,19 +98,22 @@ export function Home() {
           </div>
 
           <div className="feed-title-row">
-            <h2>전체 쟁점</h2>
+            <h2>전체 주제</h2>
             <span>{visible.length}개</span>
           </div>
 
           <div className="community-issue-list">
             {visible.map((issue) => <CommunityIssue issue={issue} key={issue.id} />)}
-            {!issues.length && !error ? [1, 2, 3].map((item) => <div className="community-skeleton" key={item} />) : null}
+            {loading ? [1, 2, 3].map((item) => <div className="community-skeleton" key={item} />) : null}
+            {!loading && !issues.length && !error ? (
+              <div className="community-error"><b>현재 열린 주제가 없습니다.</b><span>검수가 끝난 새 주제가 발행되면 여기에 표시됩니다.</span></div>
+            ) : null}
           </div>
         </section>
 
         <aside className="community-sidebar">
           <section className="sidebar-box">
-            <div className="sidebar-heading ranking-heading"><b>🔥 쟁점 랭킹</b><span>실시간</span></div>
+            <div className="sidebar-heading ranking-heading"><b>🔥 주제 랭킹</b><span>실시간</span></div>
             <ol className="ranking-list">
               {rankedIssues.map((issue, index) => (
                 <li className={index === 0 ? "rank-first" : ""} key={issue.id}>
@@ -130,17 +145,27 @@ function activityScore(issue: IssueSummary) {
   return issue.participant_count + issue.comment_count * 20;
 }
 
+function timestamp(value: string | null, fallback: number) {
+  return value ? new Date(value).getTime() : fallback;
+}
+
+function remainingLabel(value: string | null) {
+  if (!value) return "마감 미정";
+  const milliseconds = new Date(value).getTime() - Date.now();
+  const days = Math.max(0, Math.ceil(milliseconds / 86_400_000));
+  return days === 0 ? "오늘 마감" : `${days}일 후 마감`;
+}
+
 function CommunityIssue({ issue }: { issue: IssueSummary }) {
   return (
     <article className="community-issue">
       <div className="issue-vote-box"><span>참여</span><b>{formatNumber.format(issue.participant_count)}</b></div>
       <div className="community-issue-body">
-        <div className="community-issue-meta"><span>{issue.category}</span><span>토론 중</span><time>방금 전</time></div>
+        <div className="community-issue-meta"><span>{issue.category}</span><span>토론 중</span><time>{remainingLabel(issue.closes_at)}</time></div>
         <Link href={`/issues/${issue.slug}`}><h3>{issue.question}</h3></Link>
         <p>{issue.brief}</p>
         <div className="community-issue-footer">
           <span>💬 의견 {issue.comment_count}</span>
-          <span>↳ 댓글 {Math.max(issue.comment_count * 3, 12)}</span>
           <span>🔗 자료 {issue.source_count}</span>
           <Link href={`/issues/${issue.slug}`}>토론 들어가기 →</Link>
         </div>

@@ -1,4 +1,11 @@
-import type { Comment, IssueDetail, IssueSummary } from "./types";
+import type {
+  AdminIssue,
+  Comment,
+  IssueDetail,
+  IssueSummary,
+  NewsCandidatePool,
+  SelectedNewsDraft,
+} from "./types";
 import { getSupabaseBrowserClient } from "./supabase/client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -43,6 +50,21 @@ export const api = {
     }),
   }),
   issues: () => request<{ items: IssueSummary[] }>("/api/v1/issues"),
+  newsCandidates: (category?: string) =>
+    request<NewsCandidatePool>(
+      `/api/v1/admin/news/candidates?limit=200${category ? `&category=${encodeURIComponent(category)}` : ""}`,
+    ),
+  selectNewsCluster: (clusterId: string) =>
+    request<{ issue_id: string; status: string; duplicate_status: string }>(
+      `/api/v1/admin/news/clusters/${clusterId}/select`,
+      { method: "POST" },
+    ),
+  selectedNewsDrafts: () =>
+    request<{ items: SelectedNewsDraft[] }>("/api/v1/admin/news/selected-drafts"),
+  confirmSelectedNewsDraft: (issueId: string) =>
+    request<AdminIssue>(`/api/v1/admin/news/selected-drafts/${issueId}/confirm`, {
+      method: "POST",
+    }),
   issue: (slug: string) => request<IssueDetail>(`/api/v1/issues/${slug}`),
   comments: (issueId: string) =>
     request<{ items: Comment[] }>(`/api/v1/issues/${issueId}/comments`),
