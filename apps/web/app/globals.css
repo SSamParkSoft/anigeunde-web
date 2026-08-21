@@ -596,6 +596,55 @@ html:has(.policy-page) { scroll-behavior: auto; }
 .comment-confirm-dialog button { min-width: 66px; padding: 9px 13px; border: 1px solid var(--black); border-radius: 6px; background: var(--white); font-size: 10px; font-weight: 850; cursor: pointer; }
 .comment-confirm-dialog button.primary { color: var(--white); background: var(--black); }
 .comment-confirm-dialog button.danger { border-color: #a71f1f; color: var(--white); background: #a71f1f; }
+.settings-page { width: min(760px, calc(100% - 40px)); min-height: 75vh; margin: 0 auto; padding: 54px 0 100px; }
+.settings-page > header { padding-bottom: 24px; border-bottom: 2px solid var(--black); }
+.settings-page > header > span { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .12em; }
+.settings-page > header h1 { margin: 9px 0 5px; font-size: 38px; letter-spacing: -.055em; }
+.settings-page > header p, .settings-page section p { margin: 0; color: #666; font-size: 12px; line-height: 1.6; }
+.settings-page > section { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; border-bottom: 1px solid #d8d8d8; }
+.settings-page section h2 { margin: 0 0 6px; font-size: 17px; }
+.settings-action-row, .settings-links, .settings-mfa { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
+.settings-page section button, .settings-links a { padding: 8px 12px; border: 1px solid var(--black); border-radius: 6px; color: var(--black); background: var(--white); font-size: 10px; font-weight: 800; text-decoration: none; cursor: pointer; }
+.settings-page .danger-zone button { border-color: #a71f1f; color: #a71f1f; }
+.settings-mfa { max-width: 330px; flex-wrap: wrap; justify-content: flex-end; }
+.settings-mfa code { width: 100%; overflow-wrap: anywhere; padding: 7px; border: 1px solid #ddd; background: #f7f7f7; font-size: 9px; user-select: all; }
+.settings-mfa input { width: 92px; padding: 8px; border: 1px solid #aaa; border-radius: 6px; font: inherit; }
+.settings-page .settings-appeal-section { align-items: flex-start; }
+.settings-appeal-form { width: min(360px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.settings-appeal-form input, .settings-appeal-form textarea { min-width: 0; padding: 8px; border: 1px solid #aaa; border-radius: 6px; font: inherit; }
+.settings-appeal-form textarea { min-height: 72px; grid-column: 1 / -1; resize: vertical; }
+.settings-appeal-form button { justify-self: end; grid-column: 1 / -1; }
+.settings-sanction-list { display: grid; gap: 6px; margin-bottom: 10px; }
+.settings-sanction-list button { display: grid; gap: 3px; width: 100%; padding: 9px; border: 1px solid #aaa; border-radius: 6px; background: #fff; text-align: left; cursor: pointer; }
+.settings-sanction-list span, .settings-sanction-list small, .settings-empty { color: #666; font-size: 10px; }
+.settings-notice, .settings-error { margin: 16px 0 0; padding: 10px 12px; border-radius: 6px; font-size: 11px; }
+.settings-notice { background: #edf7ee; }
+.settings-error { color: #8a1111; background: #fff0f0; }
+.moderation-page { max-width: 1100px; }
+.moderation-section { margin-top: 34px; }
+.moderation-section > h2 { margin: 0 0 12px; font-size: 17px; }
+.moderation-list { display: grid; gap: 12px; }
+.moderation-card { padding: 17px; border: 1px solid #bbb; border-radius: 10px; background: var(--white); }
+.moderation-card.priority-urgent { border: 2px solid #b31313; }
+.moderation-card.priority-high { border-color: #cc6800; }
+.moderation-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; }
+.moderation-card > header div { display: flex; gap: 8px; }
+.moderation-comment-body { margin: 14px 0 7px; font-size: 13px; line-height: 1.55; }
+.moderation-description { color: #666; font-size: 11px; }
+.moderation-card label { display: grid; gap: 5px; margin-top: 12px; font-size: 10px; font-weight: 800; }
+.moderation-card textarea { min-height: 58px; padding: 9px; border: 1px solid #aaa; border-radius: 5px; resize: vertical; font: inherit; }
+.moderation-card select { padding: 8px; border: 1px solid #aaa; border-radius: 5px; background: var(--white); font: inherit; }
+.moderation-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.moderation-actions button { padding: 7px 9px; border: 1px solid #aaa; border-radius: 5px; background: var(--white); font-size: 9px; font-weight: 800; cursor: pointer; }
+.moderation-actions button:disabled { opacity: .4; cursor: not-allowed; }
+.report-states { padding-top: 9px; border-top: 1px solid #eee; }
+.sanctions button:last-child { color: #a71f1f; border-color: #a71f1f; }
+.moderation-checks { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 10px; }
+.moderation-checks label { display: flex; align-items: center; flex-direction: row; gap: 5px; margin: 0; }
+.rights-intake { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-bottom: 14px; padding: 14px; border: 1px solid #bbb; border-radius: 9px; }
+.rights-intake input, .rights-intake select, .rights-intake textarea { padding: 8px; border: 1px solid #aaa; border-radius: 5px; background: var(--white); font: inherit; }
+.rights-intake textarea { min-height: 75px; grid-column: 1 / -1; resize: vertical; }
+.rights-intake button { justify-self: start; padding: 8px 12px; border: 1px solid var(--black); border-radius: 5px; background: var(--black); color: var(--white); font-size: 10px; font-weight: 800; cursor: pointer; }
 .comment-main > p { max-width: 820px; margin: 5px 0 3px; font-size: 12px; line-height: 1.45; }
 .comment-main > p.comment-placeholder { color: #888; font-style: italic; }
 .reply-target { margin-right: 5px; color: #555; font-size: 10px; white-space: nowrap; }
@@ -728,6 +777,15 @@ html:has(.policy-page) { scroll-behavior: auto; }
 }
 
 @media (max-width: 480px) {
+  .settings-page { width: calc(100% - 32px); padding-top: 28px; }
+  .settings-page > section { align-items: flex-start; flex-direction: column; gap: 14px; }
+  .settings-links { flex-wrap: wrap; }
+  .settings-appeal-form { grid-template-columns: 1fr; }
+  .settings-appeal-form textarea, .settings-appeal-form button { grid-column: auto; }
+  .moderation-card { padding: 13px; }
+  .moderation-card > header { align-items: flex-start; flex-direction: column; }
+  .rights-intake { grid-template-columns: 1fr; }
+  .rights-intake textarea { grid-column: auto; }
   .section-heading-row { flex-direction: column; }
   .result-rule { max-width: none; }
   .metric-group b { font-size: 22px; }

@@ -21,7 +21,7 @@ const toc = [
 
 export default function RightsPage() {
   return (
-    <PolicyPage version="1.1" title="권리침해 신고 안내" description="명예훼손, 사생활·개인정보 침해 및 저작권 침해에 대한 삭제, 임시조치, 반박내용 게재와 복제·전송 중단 요청 절차입니다.">
+    <PolicyPage effectiveDate="2026년 8월 21일" version="1.2" title="권리침해 신고 안내" description="명예훼손, 사생활·개인정보 침해 및 저작권 침해에 대한 삭제, 임시조치, 반박내용 게재와 복제·전송 중단 요청 절차입니다.">
       <div className="policy-local-intro">
         <p>이 페이지는 단순한 커뮤니티 규칙 위반 신고가 아니라, 본인 또는 정당한 대리인이 법률상 권리침해를 소명하여 조치를 요청하는 절차를 안내합니다. 다른 사람의 게시물이 운영정책에 위반된다고 알리려는 경우에는 <Link href="/community-guidelines#section-09">커뮤니티 일반 신고</Link>를 이용해 주세요.</p>
         <p>회사는 신청인의 주장만으로 게시자의 위법성을 확정하지 않습니다. 권리관계, 표현의 내용과 맥락, 공익성, 반론 가능성, 긴급성과 관계 법령을 검토하여 필요한 조치를 합니다.</p>
@@ -125,14 +125,16 @@ export default function RightsPage() {
       </PolicySection>
 
       <PolicySection number="11" title="접수 창구와 법정 수령인">
-        <p>현재 권리침해 요청 사전 접수 창구는 다음과 같습니다.</p>
+        <p>권리침해 요청 접수 창구와 저작권 복제·전송 중단 및 재개 요청 수령인은 다음과 같습니다.</p>
         <ul>
           <li>운영회사: 주식회사 콘텐트럭</li>
-          <li>담당부서: 아니근데 운영팀</li>
+          <li>수령인 성명: 박종인</li>
+          <li>소속·직위: 아니근데 운영팀 / 대표이사</li>
+          <li>전화번호: <a href="tel:01063333486">010-6333-3486</a></li>
+          <li>팩스번호: 없음</li>
           <li>이메일: <a href="mailto:ssamso8282@gmail.com">ssamso8282@gmail.com</a></li>
           <li>우편주소: 경기도 안산시 상록구 한양대학로 55, 제5공학관 지하1층 소프트웨어창업실 2호(사동)</li>
         </ul>
-        <p className="policy-note">위 창구는 현재 일반·사전 접수 창구입니다. 저작권법상 복제·전송 중단 요구 수령인으로 정식 지정하려면 성명·소속부서, 전화번호·팩스번호·이메일과 우편주소를 모두 공개해야 합니다. 회사는 공개 서비스 출시 전에 해당 정보를 갖추어 별도로 공지합니다.</p>
       </PolicySection>
 
       <PolicySection number="12" title="긴급상황과 외부 구제절차">

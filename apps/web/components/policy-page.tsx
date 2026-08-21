@@ -8,7 +8,7 @@ const policyLinks = [
   ["/rights", "권리침해 신고 안내"],
 ] as const;
 
-export function PolicyPage({ title, description, children, plain = false, effectiveDate = "2026년 8월 18일", version = "1.0" }: {
+export function PolicyPage({ title, description, children, plain = false, effectiveDate = "2026년 8월 21일", version = "1.1" }: {
   title: string;
   description: string;
   children: ReactNode;

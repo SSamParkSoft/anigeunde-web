@@ -10,6 +10,8 @@ export type IssueSummary = {
   comment_count: number;
   published_at: string | null;
   closes_at: string | null;
+  requires_sensitive_consent: boolean;
+  ai_assisted: boolean;
 };
 
 export type IssueOption = {
@@ -40,6 +42,8 @@ export type IssueDetail = {
   published_at: string | null;
   closes_at: string | null;
   participation_open: boolean;
+  requires_sensitive_consent: boolean;
+  ai_assisted: boolean;
   updated_at: string;
   options: IssueOption[];
   my_position_id: string | null;
@@ -50,7 +54,6 @@ export type Comment = {
   id: string;
   nickname: string;
   body: string;
-  position: string;
   created_at: string;
   depth: number;
   parent_id: string | null;
@@ -58,6 +61,7 @@ export type Comment = {
   can_delete: boolean;
   is_deleted: boolean;
   is_blocked: boolean;
+  is_locked: boolean;
   like_count: number;
   dislike_count: number;
   rebuttal_count: number;
@@ -66,12 +70,19 @@ export type Comment = {
 };
 
 export type CommentReportReason =
-  | "POLICY_VIOLATION"
-  | "HARASSMENT_OR_HATE"
+  | "HARASSMENT"
+  | "HATE_OR_DISCRIMINATION"
+  | "PERSONAL_INFORMATION"
   | "FALSE_OR_DEFAMATORY"
-  | "PRIVACY"
-  | "ILLEGAL_OR_DANGEROUS"
+  | "PRIVACY_INVASION"
+  | "ILLEGAL_OR_SEXUAL"
   | "SPAM"
+  | "IMPERSONATION"
+  | "VIOLENCE_THREAT"
+  | "NONCONSENSUAL_SEXUAL"
+  | "CSAM"
+  | "DOXXING"
+  | "ONGOING_CRIME"
   | "OTHER";
 
 export type NewsCandidate = {
@@ -140,6 +151,8 @@ export type AdminIssue = {
   category: string;
   status: string;
   featured: boolean;
+  requires_sensitive_consent: boolean;
+  ai_assisted: boolean;
   scheduled_at: string | null;
   published_at: string | null;
   closes_at: string | null;
@@ -164,4 +177,68 @@ export type SelectedNewsDraft = {
   duplicate_issue_question: string | null;
   duplicate_reason: string;
   selected_at: string;
+};
+
+export type ModerationReport = {
+  id: string;
+  comment_id: string;
+  comment_body: string | null;
+  comment_status: string;
+  comment_author_id: string | null;
+  reason_code: string;
+  description: string;
+  priority: "NORMAL" | "HIGH" | "URGENT";
+  status: string;
+  action_reason: string;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export type ModerationAppeal = {
+  id: string;
+  comment_id: string | null;
+  report_id: string | null;
+  sanction_id: string | null;
+  statement: string;
+  status: string;
+  resolution: string;
+  created_at: string;
+};
+
+export type MyModerationStatus = {
+  account_status: string;
+  sanctions: Array<{
+    id: string;
+    type: string;
+    status: string;
+    reason: string;
+    starts_at: string;
+    ends_at: string | null;
+  }>;
+  appeals: Array<{
+    id: string;
+    comment_id: string | null;
+    report_id: string | null;
+    sanction_id: string | null;
+    status: string;
+    resolution: string;
+    created_at: string;
+  }>;
+};
+
+export type RightsCase = {
+  id: string;
+  case_type: string;
+  requester_name: string;
+  requester_email: string;
+  target_url: string;
+  comment_id: string | null;
+  statement: string;
+  status: string;
+  priority: "NORMAL" | "HIGH" | "URGENT";
+  action_reason: string;
+  author_statement: string;
+  requester_notified_at: string | null;
+  author_notified_at: string | null;
+  created_at: string;
 };

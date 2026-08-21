@@ -69,6 +69,7 @@ function DraftEditor({
     question: draft.issue.question,
     brief: draft.issue.brief,
     category: draft.issue.category,
+    requiresSensitiveConsent: draft.issue.requires_sensitive_consent,
     support: support?.short_label ?? "",
     oppose: oppose?.short_label ?? "",
   };
@@ -96,6 +97,7 @@ function DraftEditor({
       question: form.question.trim(),
       brief: form.brief.trim(),
       category: form.category.trim(),
+      requires_sensitive_consent: form.requiresSensitiveConsent,
       options: [
         { stance: "SUPPORT", label: form.support.trim() },
         { stance: "OPPOSE", label: form.oppose.trim() },
@@ -105,6 +107,7 @@ function DraftEditor({
       question: form.question.trim(),
       brief: form.brief.trim(),
       category: form.category.trim(),
+      requiresSensitiveConsent: form.requiresSensitiveConsent,
       support: form.support.trim(),
       oppose: form.oppose.trim(),
     };
@@ -200,6 +203,14 @@ function DraftEditor({
             maxLength={10_000}
             onChange={(event) => setForm((current) => ({ ...current, brief: event.target.value }))}
           />
+        </label>
+        <label className="admin-draft-sensitive-toggle">
+          <input
+            type="checkbox"
+            checked={form.requiresSensitiveConsent}
+            onChange={(event) => setForm((current) => ({ ...current, requiresSensitiveConsent: event.target.checked }))}
+          />
+          <span>정치적 견해 등 민감정보 처리 동의 필요</span>
         </label>
       </div>
 

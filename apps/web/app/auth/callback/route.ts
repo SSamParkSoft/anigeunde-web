@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
 
   const { url, publishableKey } = getSupabaseConfig();
   const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: {
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookiesToSet) => {

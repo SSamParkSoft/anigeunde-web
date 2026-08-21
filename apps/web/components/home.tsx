@@ -119,7 +119,7 @@ export function Home() {
             <Link href={`/issues/${hottest.slug}`} className="hot-issue">
               <div className="hot-topline">
                 <span><i /> 지금 가장 뜨거운 주제</span>
-                <span>{hottest.category} · 실시간 1위</span>
+                <span>{hottest.category} · 실시간 1위{hottest.ai_assisted ? " · AI 보조 작성" : ""}</span>
               </div>
               <h2>{hottest.question}</h2>
               <div className="hot-footer">
@@ -289,7 +289,7 @@ function CommunityIssue({ issue }: { issue: IssueSummary }) {
   return (
     <article className="community-issue">
       <div className="community-issue-body">
-        <div className="community-issue-meta"><span>{issue.category}</span><span>{closed ? "마감" : "토론 중"}</span><time>{closed ? closedLabel(issue.closes_at) : remainingLabel(issue.closes_at)}</time></div>
+        <div className="community-issue-meta"><span>{issue.category}</span><span>{closed ? "마감" : "토론 중"}</span>{issue.ai_assisted ? <span>AI 보조 작성</span> : null}<time>{closed ? closedLabel(issue.closes_at) : remainingLabel(issue.closes_at)}</time></div>
         <Link href={`/issues/${issue.slug}`}><h3>{issue.question}</h3></Link>
         <div className="community-issue-footer">
           <span>참여 {formatNumber.format(issue.participant_count)}명 ·</span>

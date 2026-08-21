@@ -24,7 +24,7 @@ export async function startSocialLogin(provider: LoginProvider, pending: Pending
     provider,
     options: {
       redirectTo: callback.toString(),
-      scopes: provider === "google" ? "openid email profile" : undefined,
+      scopes: undefined,
     },
   });
 
@@ -41,7 +41,7 @@ export async function startAccountLogin(provider: LoginProvider) {
     provider,
     options: {
       redirectTo: callback.toString(),
-      scopes: provider === "google" ? "openid email profile" : undefined,
+      scopes: undefined,
     },
   });
   if (error) {

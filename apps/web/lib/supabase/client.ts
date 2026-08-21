@@ -7,7 +7,12 @@ let browserClient: SupabaseClient | undefined;
 export function getSupabaseBrowserClient() {
   if (!browserClient) {
     const { url, publishableKey } = getSupabaseConfig();
-    browserClient = createBrowserClient(url, publishableKey);
+    browserClient = createBrowserClient(url, publishableKey, {
+      cookieOptions: {
+        sameSite: "lax",
+        secure: window.location.protocol === "https:",
+      },
+    });
   }
   return browserClient;
 }

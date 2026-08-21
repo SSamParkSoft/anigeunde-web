@@ -28,11 +28,13 @@ export function IssueView({ slug }: { slug: string }) {
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasSensitiveConsent, setHasSensitiveConsent] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [commentSort, setCommentSort] = useState<"latest" | "popular">("popular");
   const [commentPage, setCommentPage] = useState(1);
   const [accountReadyVersion, setAccountReadyVersion] = useState(0);
   const pendingParticipation = useRef<PendingParticipation | null>(null);
+  const pendingAction = useRef<(() => void | Promise<void>) | null>(null);
   const resumingLogin = useRef(false);
 
   useEffect(() => {
@@ -50,6 +52,20 @@ export function IssueView({ slug }: { slug: string }) {
 
     return () => data.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      queueMicrotask(() => setHasSensitiveConsent(false));
+      return;
+    }
+    void api.consentStatus()
+      .then(({ items, required_versions: requiredVersions }) => setHasSensitiveConsent(items.some((item) => (
+        item.consent_type === "SENSITIVE_PARTICIPATION"
+        && item.version === requiredVersions.SENSITIVE_PARTICIPATION
+        && item.granted
+      ))))
+      .catch(() => setHasSensitiveConsent(false));
+  }, [accountReadyVersion, isAuthenticated]);
 
   useEffect(() => {
     const handleAccountReady = () => setAccountReadyVersion((current) => current + 1);
@@ -163,6 +179,11 @@ export function IssueView({ slug }: { slug: string }) {
       return action();
     };
     if (isAuthenticated) {
+      if (issue?.requires_sensitive_consent && !hasSensitiveConsent) {
+        pendingAction.current = action;
+        setLoginOpen(true);
+        return;
+      }
       void continueAfterLogin();
       return;
     }
@@ -180,14 +201,19 @@ export function IssueView({ slug }: { slug: string }) {
   }
 
   async function completeAuthenticatedParticipation() {
-    await api.consentSensitivePosition();
+    await api.consentSensitiveParticipation();
+    setHasSensitiveConsent(true);
     const pending = pendingParticipation.current;
+    const action = pendingAction.current;
     pendingParticipation.current = null;
+    pendingAction.current = null;
     setLoginOpen(false);
     if (pending?.kind === "position" && pending.optionId) {
       await persistPosition(pending.optionId);
       clearPendingParticipation();
+      return;
     }
+    if (action) await action();
   }
 
   async function createComment(body: string) {
@@ -206,6 +232,11 @@ export function IssueView({ slug }: { slug: string }) {
     if (!issue?.my_position_id) {
       setError("의견을 등록하려면 먼저 위에서 내 생각을 선택해주세요.");
       document.querySelector(".position-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return false;
+    }
+    if (issue.requires_sensitive_consent && !hasSensitiveConsent) {
+      pendingAction.current = () => createComment(body);
+      setLoginOpen(true);
       return false;
     }
     await createComment(body);
@@ -314,6 +345,7 @@ export function IssueView({ slug }: { slug: string }) {
           <div className="issue-kicker">
             <span>{issue.category}</span>
             <span className="status-dot">{issue.participation_open ? "토론 중" : "마감"}</span>
+            {issue.ai_assisted ? <span>AI 보조 작성 · 운영자 검토</span> : null}
             <span>업데이트 2026.08.18</span>
           </div>
           <h1>{issue.question}</h1>
@@ -337,7 +369,7 @@ export function IssueView({ slug }: { slug: string }) {
                   </button>
                 ))}
               </div>
-              <small className="consent-note">선택 시 정치적 견해에 해당할 수 있는 정보 처리에 동의합니다.</small>
+              {issue.requires_sensitive_consent ? <small className="consent-note">입장을 확정하기 전에 정치적 견해 등 민감정보 처리에 대한 별도 동의를 받습니다.</small> : null}
             </>
           </section>
         ) : !issue.my_position_id ? (
@@ -431,6 +463,7 @@ export function IssueView({ slug }: { slug: string }) {
       </div>
       {loginOpen ? <LoginGate onClose={() => {
         pendingParticipation.current = null;
+        pendingAction.current = null;
         setLoginOpen(false);
       }} isAuthenticated={isAuthenticated} onConsentComplete={completeAuthenticatedParticipation} onProvider={beginSocialLogin} /> : null}
     </main>
@@ -461,12 +494,19 @@ function ResultPanel({ issue, selectedLabel, onChange }: { issue: IssueDetail; s
 }
 
 const reportReasons: Array<{ value: CommentReportReason; label: string }> = [
-  { value: "POLICY_VIOLATION", label: "운영정책 위반" },
-  { value: "HARASSMENT_OR_HATE", label: "괴롭힘·욕설·혐오" },
+  { value: "HARASSMENT", label: "욕설·괴롭힘" },
+  { value: "HATE_OR_DISCRIMINATION", label: "혐오·차별" },
+  { value: "PERSONAL_INFORMATION", label: "개인정보·신상정보 노출" },
   { value: "FALSE_OR_DEFAMATORY", label: "허위사실·명예훼손" },
-  { value: "PRIVACY", label: "개인정보 노출" },
-  { value: "ILLEGAL_OR_DANGEROUS", label: "불법·위험 콘텐츠" },
-  { value: "SPAM", label: "도배·광고" },
+  { value: "PRIVACY_INVASION", label: "사생활 침해" },
+  { value: "ILLEGAL_OR_SEXUAL", label: "불법·성적 콘텐츠" },
+  { value: "SPAM", label: "스팸·도배" },
+  { value: "IMPERSONATION", label: "사칭" },
+  { value: "VIOLENCE_THREAT", label: "실제 폭력·살해 위협" },
+  { value: "NONCONSENSUAL_SEXUAL", label: "불법촬영물" },
+  { value: "CSAM", label: "아동·청소년 성착취물" },
+  { value: "DOXXING", label: "주소·전화번호 등 신상털이" },
+  { value: "ONGOING_CRIME", label: "현재 진행 중인 범죄 위험" },
   { value: "OTHER", label: "기타" },
 ];
 
@@ -504,7 +544,7 @@ function CommentCard({
   const [replying, setReplying] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const [reportReason, setReportReason] = useState<CommentReportReason>("POLICY_VIOLATION");
+  const [reportReason, setReportReason] = useState<CommentReportReason>("HARASSMENT");
   const [reportDescription, setReportDescription] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"delete" | "block" | null>(null);
@@ -569,7 +609,7 @@ function CommentCard({
         <div className="comment-index">#{String(index + 1).padStart(2, "0")}</div>
         <div className="comment-main">
           <header>
-            <div><b>{comment.nickname}</b><span>{comment.position} · {formatCommentTime(comment.created_at)}</span></div>
+            <div><b>{comment.nickname}</b><span>{formatCommentTime(comment.created_at)}</span></div>
             <div className="comment-header-actions">
               {comment.is_mine && !comment.is_deleted ? <em>내 의견</em> : null}
               {!comment.is_deleted && !comment.is_blocked ? (
@@ -599,13 +639,13 @@ function CommentCard({
             <div className="comment-actions"><button type="button" onClick={() => requireLogin(() => onUnblock(comment))}>차단 해제</button></div>
           ) : !comment.is_deleted ? (
             <div className="comment-actions">
-              <button disabled={!participationOpen} className={comment.viewer_reactions.includes("LIKE") ? "active" : ""} onClick={() => requireParticipation(() => onReact(comment, "like"))}>
+              <button disabled={!participationOpen || comment.is_locked} className={comment.viewer_reactions.includes("LIKE") ? "active" : ""} onClick={() => requireParticipation(() => onReact(comment, "like"))}>
                 좋아요 <b>{comment.like_count}</b>
               </button>
-              <button disabled={!participationOpen} className={comment.viewer_reactions.includes("DISLIKE") ? "active dark" : ""} onClick={() => requireParticipation(() => onReact(comment, "dislike"))}>
+              <button disabled={!participationOpen || comment.is_locked} className={comment.viewer_reactions.includes("DISLIKE") ? "active dark" : ""} onClick={() => requireParticipation(() => onReact(comment, "dislike"))}>
                 싫어요 <b>{comment.dislike_count}</b>
               </button>
-              <button disabled={!participationOpen} className="rebuttal-button" onClick={() => requireParticipation(() => setReplying((value) => !value))}>
+              <button disabled={!participationOpen || comment.is_locked} className="rebuttal-button" onClick={() => requireParticipation(() => setReplying((value) => !value))}>
                 댓글 <b>{comment.rebuttal_count}</b> <span>↳</span>
               </button>
             </div>
@@ -623,6 +663,7 @@ function CommentCard({
                 <textarea maxLength={500} value={reportDescription} onChange={(event) => setReportDescription(event.target.value)} placeholder="운영자가 확인할 내용을 적어주세요." />
               </label>
               <div><button type="button" onClick={() => setReporting(false)}>취소</button><button type="submit" disabled={actionBusy}>신고 접수</button></div>
+              <p className="report-rights-link">법적인 삭제·임시조치가 필요하면 <Link href="/rights">권리침해 신고 안내</Link>를 이용해주세요.</p>
             </form>
           ) : null}
           {replying ? <Composer title={`@${comment.nickname}에게 댓글`} actionLabel="댓글 달기" onSubmit={async (body) => { await onRebuttal(comment.id, body); setReplying(false); }} compact /> : null}
@@ -716,12 +757,27 @@ function LoginGate({ onClose, isAuthenticated, onConsentComplete, onProvider }: 
       <section className="login-gate compact-login-gate" role="dialog" aria-modal="true" aria-labelledby="login-gate-title" onMouseDown={(event) => event.stopPropagation()}>
         <button className="login-gate-close" type="button" aria-label="로그인 창 닫기" onClick={onClose}>×</button>
         <div className="login-modal-heading">
-          <h2 id="login-gate-title">{isAuthenticated ? "참여 동의" : "아니근데에 로그인"}</h2>
-          <p>{isAuthenticated ? "입장을 반영하려면 필수 동의를 확인해주세요." : "소셜 계정으로 계속하세요."}</p>
+          <h2 id="login-gate-title">{isAuthenticated ? "민감정보 처리 동의" : "아니근데에 로그인"}</h2>
+          <p>{isAuthenticated ? "정치·사회적 주제 참여에 필요한 별도 동의입니다." : "소셜 계정으로 계속하세요."}</p>
         </div>
         {isAuthenticated ? (
           <div className="login-consents">
-            <label><input type="checkbox" checked={sensitiveConsent} onChange={(event) => setSensitiveConsent(event.target.checked)} /><span><b>[필수]</b> 선택한 입장이 정치적 견해에 해당할 수 있으며, 참여 집계와 토론 제공을 위해 처리되는 것에 동의합니다.</span></label>
+            <>
+              <label><input type="checkbox" checked={sensitiveConsent} onChange={(event) => setSensitiveConsent(event.target.checked)} /><span><b>[필수]</b> 민감정보 처리에 동의합니다.</span></label>
+              <details className="sensitive-consent-details">
+                <summary>자세히 보기</summary>
+                <div>
+                  <b>처리 목적</b>
+                  <p>사회·정치적 주제에 대한 입장 선택 및 토론 기능 제공, 회원 참여 결과 집계, 이용자가 작성한 댓글 및 반응 제공</p>
+                  <b>처리 항목</b>
+                  <p>주제별 입장 선택, 댓글·반응 및 참여기록 중 정치적 견해 등 민감정보에 해당할 수 있는 정보</p>
+                  <b>보유기간</b>
+                  <p>개인정보 처리방침에서 정한 참여정보 보유기간까지 보유합니다. 회원 탈퇴 또는 동의 철회 시 개인과 연결되는 민감정보는 삭제하는 것을 원칙으로 하며, 완전히 익명화된 집계 결과는 유지될 수 있습니다.</p>
+                  <b>동의 거부</b>
+                  <p>동의를 거부할 수 있습니다. 거부하면 민감정보 처리가 필요한 주제의 입장 확정·댓글·반응 기능은 이용할 수 없지만 단순 열람은 가능합니다.</p>
+                </div>
+              </details>
+            </>
           </div>
         ) : null}
         {error ? <p className="login-gate-error">{error}</p> : null}
@@ -768,6 +824,7 @@ function Composer({ title, actionLabel, onSubmit, compact = false, inline = fals
   return (
     <form className={`composer ${compact ? "compact" : ""} ${inline ? "inline" : ""}`} onSubmit={submit}>
       <label htmlFor={`composer-${title}`}>{title}</label>
+      <p className="composer-public-notice">작성한 댓글은 다른 이용자에게 공개됩니다. 정치적 견해 등 공개를 원하지 않는 개인정보나 민감정보는 작성하지 마세요.</p>
       <textarea
         id={`composer-${title}`}
         value={body}
