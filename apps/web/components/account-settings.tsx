@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { MyModerationStatus } from "@/lib/types";
 
 type Confirmation = "withdraw" | "delete" | null;
 
@@ -18,11 +17,10 @@ export function AccountSettings() {
   const [mfaSecret, setMfaSecret] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [assuranceLevel, setAssuranceLevel] = useState("");
-  const [appealCommentId, setAppealCommentId] = useState("");
-  const [appealReportId, setAppealReportId] = useState("");
+  const [appealFormOpen, setAppealFormOpen] = useState(false);
+  const [appealTitle, setAppealTitle] = useState("");
   const [appealSanctionId, setAppealSanctionId] = useState("");
   const [appealStatement, setAppealStatement] = useState("");
-  const [moderationStatus, setModerationStatus] = useState<MyModerationStatus | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -40,7 +38,7 @@ export function AccountSettings() {
       api.myModerationStatus(),
     ]);
     setHasSensitiveConsent(status.items.some((item) => item.consent_type === "SENSITIVE_PARTICIPATION" && item.granted));
-    setModerationStatus(moderation);
+    setAppealSanctionId(moderation.sanctions.find((item) => item.status === "ACTIVE")?.id ?? moderation.sanctions[0]?.id ?? "");
     setLoaded(true);
     if (["MODERATOR", "EDITOR", "ADMIN"].includes(session.profile.role)) {
       const supabase = getSupabaseBrowserClient();
@@ -77,6 +75,21 @@ export function AccountSettings() {
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "요청을 완료하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function grantSensitiveConsent() {
+    if (hasSensitiveConsent) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.consentSensitiveParticipation();
+      setHasSensitiveConsent(true);
+      setNotice("민감정보 처리에 동의했습니다.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "동의 상태를 변경하지 못했습니다.");
     } finally {
       setBusy(false);
     }
@@ -122,24 +135,24 @@ export function AccountSettings() {
   }
 
   async function submitAppeal() {
-    if ((!appealCommentId.trim() && !appealReportId.trim() && !appealSanctionId.trim()) || appealStatement.trim().length < 2) {
-      setError("댓글·신고·제재 중 하나의 식별정보와 이의제기 내용을 입력해주세요.");
+    const title = appealTitle.trim();
+    const statement = appealStatement.trim();
+    if (title.length < 2 || statement.length < 2) {
+      setError("제목과 내용을 각각 2자 이상 입력해주세요.");
       return;
     }
     setBusy(true);
     setError("");
     try {
       await api.createModerationAppeal(
-        appealCommentId.trim(),
-        appealReportId.trim(),
+        "",
+        "",
         appealSanctionId.trim(),
-        appealStatement.trim(),
+        `${title}\n\n${statement}`,
       );
-      setAppealCommentId("");
-      setAppealReportId("");
-      setAppealSanctionId("");
+      setAppealTitle("");
       setAppealStatement("");
-      setModerationStatus(await api.myModerationStatus());
+      setAppealFormOpen(false);
       setNotice("운영조치 이의제기를 접수했습니다.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "이의제기를 접수하지 못했습니다.");
@@ -157,7 +170,10 @@ export function AccountSettings() {
       {error ? <p className="settings-error" role="alert">{error}</p> : null}
       <section>
         <div><h2>민감정보 처리 동의</h2><p>정치·사회적 주제의 입장, 댓글과 반응 처리에 대한 동의입니다.</p></div>
-        <div className="settings-action-row"><b>{hasSensitiveConsent ? "동의함" : "동의하지 않음"}</b>{hasSensitiveConsent ? <button type="button" onClick={() => setConfirmation("withdraw")}>동의 철회</button> : null}</div>
+        <div className="settings-consent-toggle" role="group" aria-label="민감정보 처리 동의 상태">
+          <button type="button" className={hasSensitiveConsent ? "active" : ""} aria-pressed={hasSensitiveConsent} disabled={busy || hasSensitiveConsent} onClick={() => void grantSensitiveConsent()}>동의</button>
+          <button type="button" className={!hasSensitiveConsent ? "active" : ""} aria-pressed={!hasSensitiveConsent} disabled={busy || !hasSensitiveConsent} onClick={() => setConfirmation("withdraw")}>비동의</button>
+        </div>
       </section>
       {isOperator ? (
         <section>
@@ -175,16 +191,26 @@ export function AccountSettings() {
         <div className="settings-links"><Link href="/privacy">개인정보 처리방침</Link><Link href="/rights">권리침해 신고 안내</Link></div>
       </section>
       <section className="settings-appeal-section">
-        <div><h2>운영조치 이의제기</h2><p>조치 통지 후 30일 이내에 대상 식별정보와 소명 내용을 제출할 수 있습니다.</p></div>
-        <div>
-          {moderationStatus?.sanctions.length ? <div className="settings-sanction-list">{moderationStatus.sanctions.map((item) => <button type="button" key={item.id} onClick={() => setAppealSanctionId(item.id)}><b>{item.type} · {item.status}</b><span>{item.reason}</span><small>제재 ID {item.id}</small></button>)}</div> : <p className="settings-empty">표시할 계정 제재가 없습니다.</p>}
-          <div className="settings-appeal-form"><input value={appealCommentId} onChange={(event) => setAppealCommentId(event.target.value)} placeholder="댓글 ID" /><input value={appealReportId} onChange={(event) => setAppealReportId(event.target.value)} placeholder="신고 ID" /><input value={appealSanctionId} onChange={(event) => setAppealSanctionId(event.target.value)} placeholder="제재 ID" /><textarea value={appealStatement} onChange={(event) => setAppealStatement(event.target.value)} placeholder="사실관계와 이의제기 사유" maxLength={5000} /><button type="button" disabled={busy} onClick={() => void submitAppeal()}>이의제기 접수</button></div>
+        <div><h2>운영조치 이의제기</h2><p>조치 통지 후 30일 이내에 제목과 내용을 작성해 이의제기를 접수할 수 있습니다.</p></div>
+        <div className="settings-appeal-panel">
+          <button type="button" onClick={() => { setError(""); setAppealFormOpen(true); }}>이의제기 접수</button>
         </div>
       </section>
       <section className="danger-zone">
-        <div><h2>회원 탈퇴</h2><p>OAuth 계정 연결, 입장과 반응을 삭제하고 댓글은 정책에 따라 삭제 또는 익명화합니다.</p></div>
+        <div><h2>회원 탈퇴</h2></div>
         <button type="button" onClick={() => setConfirmation("delete")}>회원 탈퇴</button>
       </section>
+      {appealFormOpen ? (
+        <div className="comment-confirm-backdrop" role="presentation" onMouseDown={() => { if (!busy) { setAppealFormOpen(false); setAppealTitle(""); setAppealStatement(""); setError(""); } }}>
+          <section className="settings-appeal-modal" role="dialog" aria-modal="true" aria-labelledby="settings-appeal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <h2 id="settings-appeal-title">이의제기 접수</h2>
+            <label><span>제목</span><input autoFocus value={appealTitle} onChange={(event) => setAppealTitle(event.target.value)} maxLength={100} /></label>
+            <label><span>내용</span><textarea value={appealStatement} onChange={(event) => setAppealStatement(event.target.value)} maxLength={4800} /></label>
+            {error ? <p className="settings-appeal-error" role="alert">{error}</p> : null}
+            <div className="settings-appeal-actions"><button type="button" disabled={busy} onClick={() => { setAppealFormOpen(false); setAppealTitle(""); setAppealStatement(""); setError(""); }}>취소</button><button type="button" className="primary" disabled={busy} onClick={() => void submitAppeal()}>{busy ? "접수 중" : "접수"}</button></div>
+          </section>
+        </div>
+      ) : null}
       {confirmation ? (
         <div className="comment-confirm-backdrop" role="presentation" onMouseDown={() => !busy && setConfirmation(null)}>
           <section className="comment-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="settings-confirm-title" onMouseDown={(event) => event.stopPropagation()}>

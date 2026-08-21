@@ -11,7 +11,6 @@ import type {
   SelectedNewsDraft,
   ModerationAppeal,
   ModerationReport,
-  RightsCase,
   MyModerationStatus,
 } from "./types";
 import { getSupabaseBrowserClient } from "./supabase/client";
@@ -72,23 +71,29 @@ export const api = {
   withdrawSensitiveParticipation: () =>
     request<void>("/api/v1/consents/sensitive-participation", { method: "DELETE" }),
   deleteAccount: () => request<void>("/api/v1/me", { method: "DELETE" }),
-  moderationReports: () => request<{ items: ModerationReport[] }>("/api/v1/admin/moderation/reports"),
-  updateModerationReport: (reportId: string, nextStatus: string, reason: string) =>
+  moderationReports: (page = 1, pageSize = 8) =>
+    request<{ items: ModerationReport[]; total: number; page: number; page_size: number; total_pages: number }>(
+      `/api/v1/admin/moderation/reports?page=${page}&page_size=${pageSize}`,
+    ),
+  updateModerationReport: (reportId: string, nextStatus: string, reason: string, expectedStatus: string) =>
     request<{ id: string; status: string }>(`/api/v1/admin/moderation/reports/${reportId}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: nextStatus, reason }),
+      body: JSON.stringify({ status: nextStatus, reason, expected_status: expectedStatus }),
     }),
-  moderateComment: (commentId: string, action: string, reason: string) =>
+  moderateComment: (commentId: string, action: string, reason: string, expectedStatus: string) =>
     request<{ id: string; status: string; locked: boolean }>(`/api/v1/admin/moderation/comments/${commentId}/actions`, {
       method: "POST",
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify({ action, reason, expected_status: expectedStatus }),
     }),
   sanctionUser: (userId: string, sanctionType: string, reason: string, durationDays?: number) =>
     request<{ id: string; status: string }>(`/api/v1/admin/moderation/users/${userId}/sanctions`, {
       method: "POST",
       body: JSON.stringify({ sanction_type: sanctionType, reason, duration_days: durationDays }),
     }),
-  moderationAppeals: () => request<{ items: ModerationAppeal[] }>("/api/v1/admin/moderation/appeals"),
+  moderationAppeals: (page = 1, pageSize = 8) =>
+    request<{ items: ModerationAppeal[]; total: number; page: number; page_size: number; total_pages: number }>(
+      `/api/v1/admin/moderation/appeals?page=${page}&page_size=${pageSize}`,
+    ),
   myModerationStatus: () => request<MyModerationStatus>("/api/v1/moderation/status"),
   createModerationAppeal: (commentId: string, reportId: string, sanctionId: string, statement: string) =>
     request<{ id: string; status: string }>("/api/v1/moderation/appeals", {
@@ -100,34 +105,11 @@ export const api = {
         statement,
       }),
     }),
-  resolveModerationAppeal: (appealId: string, nextStatus: string, resolution: string) =>
+  resolveModerationAppeal: (appealId: string, nextStatus: string, resolution: string, expectedStatus: string) =>
     request<{ id: string; status: string }>(`/api/v1/admin/moderation/appeals/${appealId}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: nextStatus, resolution }),
+      body: JSON.stringify({ status: nextStatus, resolution, expected_status: expectedStatus }),
     }),
-  rightsCases: () => request<{ items: RightsCase[] }>("/api/v1/admin/moderation/rights-cases"),
-  createRightsCase: (payload: {
-    case_type: string;
-    requester_name: string;
-    requester_email: string;
-    target_url: string;
-    comment_id?: string;
-    statement: string;
-    priority: "NORMAL" | "HIGH" | "URGENT";
-  }) => request<{ id: string; status: string }>("/api/v1/admin/moderation/rights-cases", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }),
-  updateRightsCase: (caseId: string, payload: {
-    status: string;
-    action_reason: string;
-    author_statement: string;
-    requester_notified: boolean;
-    author_notified: boolean;
-  }) => request<{ id: string; status: string }>(`/api/v1/admin/moderation/rights-cases/${caseId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  }),
   issues: () => request<{ items: IssueSummary[] }>("/api/v1/issues"),
   newsCandidates: (category?: string) =>
     request<NewsCandidatePool>(

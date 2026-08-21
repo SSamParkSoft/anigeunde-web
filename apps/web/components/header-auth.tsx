@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Session } from "@supabase/supabase-js";
@@ -12,6 +12,7 @@ import { SocialLoginButtons } from "@/components/social-login-buttons";
 
 export function HeaderAuth() {
   const pathname = usePathname();
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<"USER" | "MODERATOR" | "EDITOR" | "ADMIN">("USER");
   const [open, setOpen] = useState(false);
@@ -94,7 +95,12 @@ export function HeaderAuth() {
     setAgeConfirmed(false);
     setTermsConsent(false);
     setBusy(false);
-    if (logoutError) setError(logoutError.message);
+    if (logoutError) {
+      setError(logoutError.message);
+      return;
+    }
+    router.replace("/");
+    router.refresh();
   }
 
   async function closeModal() {
@@ -110,7 +116,6 @@ export function HeaderAuth() {
 
   return (
     <div className="header-auth">
-      <Link href="/privacy" className={`header-link${pathname === "/privacy" ? " active" : ""}`}>정책</Link>
       {role === "ADMIN" ? (
           <Link href="/admin/news" className={`header-link header-admin-link${pathname === "/admin/news" ? " active" : ""}`}>뉴스 관리</Link>
       ) : null}

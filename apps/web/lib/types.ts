@@ -202,6 +202,7 @@ export type ModerationAppeal = {
   statement: string;
   status: string;
   resolution: string;
+  submitter_email: string | null;
   created_at: string;
 };
 
@@ -224,21 +225,4 @@ export type MyModerationStatus = {
     resolution: string;
     created_at: string;
   }>;
-};
-
-export type RightsCase = {
-  id: string;
-  case_type: string;
-  requester_name: string;
-  requester_email: string;
-  target_url: string;
-  comment_id: string | null;
-  statement: string;
-  status: string;
-  priority: "NORMAL" | "HIGH" | "URGENT";
-  action_reason: string;
-  author_statement: string;
-  requester_notified_at: string | null;
-  author_notified_at: string | null;
-  created_at: string;
 };
